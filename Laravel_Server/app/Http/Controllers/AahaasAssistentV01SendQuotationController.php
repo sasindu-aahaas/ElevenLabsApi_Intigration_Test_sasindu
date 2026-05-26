@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendWhatsAppQuotationJob;
 use App\Models\ServiceCall;
 use App\Services\AahaasAssistentV01Service;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +23,6 @@ class AahaasAssistentV01SendQuotationController extends Controller
         $customerProfile   = is_array($call->customer_profile) ? $call->customer_profile : [];
         $serviceCategories = is_array($call->service_categories) ? $call->service_categories : [];
 
-        // Build report from stored data
         $reportJson = $call->final_report;
         $report     = [];
 
@@ -47,25 +47,23 @@ class AahaasAssistentV01SendQuotationController extends Controller
             if (! $service->hasQuotationContacts($customerProfile)) {
                 return response()->json([
                     'call_id' => $call->call_id,
-                    'sent'    => false,
+                    'queued'  => false,
                     'message' => 'Contact details are incomplete (need full name, country, and contact number).',
                 ], 422);
             }
 
-            $result = $service->sendQuotation($call->call_id, $customerProfile, $report, $serviceCategories);
+            SendWhatsAppQuotationJob::dispatch($call->call_id, $customerProfile, $report, $serviceCategories);
 
             return response()->json([
-                'call_id'         => $call->call_id,
-                'sent'            => $result['api_sent'] || $result['email_sent'],
-                'quotation_api'   => $result['api_sent'],
-                'quotation_email' => $result['email_sent'],
-                'error'           => $result['error'],
+                'call_id' => $call->call_id,
+                'queued'  => true,
+                'message' => 'WhatsApp quotation queued successfully.',
             ]);
         } catch (Throwable $throwable) {
             $status = $throwable->getCode();
 
             return response()->json([
-                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : 'Quotation could not be sent.',
+                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : 'Quotation could not be queued.',
             ], is_int($status) && $status >= 400 && $status < 600 ? $status : 500);
         }
     }

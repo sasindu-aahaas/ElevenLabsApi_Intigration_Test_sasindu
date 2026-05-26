@@ -131,7 +131,7 @@ export default function RecordsPage() {
         ...prev,
         [publicId]: {
           loading: false,
-          sent: data.quotation_api,
+          sent: data.queued === true,
           error: data.error || null,
         },
       }));
@@ -245,7 +245,7 @@ export default function RecordsPage() {
                     <div className="quotation-status-row" style={{ marginTop: "8px", fontSize: "0.8rem" }}>
                       {quotationStatus[record.public_id].sent ? (
                         <span style={{ color: "#22c55e" }}>
-                          WhatsApp quotation sent ✓
+                          WhatsApp quotation queued ✓ (sending in background)
                         </span>
                       ) : (
                         <span style={{ color: "#ef4444" }}>

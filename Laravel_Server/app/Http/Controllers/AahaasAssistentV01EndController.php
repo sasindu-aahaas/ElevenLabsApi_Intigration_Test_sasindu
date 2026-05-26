@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendWhatsAppQuotationJob;
 use App\Models\ServiceCall;
 use App\Services\AahaasAssistentV01Service;
 use Illuminate\Http\JsonResponse;
@@ -31,14 +32,14 @@ class AahaasAssistentV01EndController extends Controller
         $serviceCategories = is_array($call->service_categories) ? $call->service_categories : [];
 
         try {
-            $report       = $service->buildFinalReport($history, $customerProfile, $serviceCategories);
-            $endedReason  = trim((string) ($validated['ended_reason'] ?? 'completed'));
+            $report      = $service->buildFinalReport($history, $customerProfile, $serviceCategories);
+            $endedReason = trim((string) ($validated['ended_reason'] ?? 'completed'));
+
             $closingMessage = $endedReason === 'package_api_unavailable'
                 ? $service->buildPackageFailureCallbackReply()
                 : $service->buildClosingMessage();
             $closingAudio = $service->synthesizeSpeech($closingMessage);
 
-            // Merge report profile back so quotation has the most complete data
             $finalProfile = array_filter(
                 array_merge($customerProfile, $report['customer_profile'] ?: []),
                 fn ($v) => $v !== null && $v !== ''
@@ -48,15 +49,16 @@ class AahaasAssistentV01EndController extends Controller
                 $report['service_categories'] ?: []
             )));
 
-            // Auto-send quotation when all three contact details are present
-            $quotationResult = ['api_sent' => false, 'email_sent' => false, 'error' => null];
+            // Dispatch WhatsApp quotation as a background job so it doesn't block the response
+            $quotationQueued = false;
             if ($service->hasQuotationContacts($finalProfile)) {
-                $quotationResult = $service->sendQuotation(
+                SendWhatsAppQuotationJob::dispatch(
                     $call->call_id,
                     $finalProfile,
                     $report,
                     $finalCategories
                 );
+                $quotationQueued = true;
             }
 
             $call->forceFill([
@@ -70,17 +72,13 @@ class AahaasAssistentV01EndController extends Controller
             ])->save();
 
             return response()->json([
-                'call_id'          => $call->call_id,
-                'status'           => $call->status,
-                'report'           => $report,
-                'closing_message'  => $closingMessage,
-                'audio_base64'     => base64_encode($closingAudio['body']),
-                'audio_mime_type'  => $closingAudio['mime_type'],
-                'quotation_sent'   => $quotationResult['api_sent'] || $quotationResult['email_sent'],
-                'quotation_api'    => $quotationResult['api_sent'],
-                'quotation_email'  => $quotationResult['email_sent'],
-                'quotation_wa_id'  => $quotationResult['wa_id'] ?? '',
-                'quotation_error'  => $quotationResult['error'],
+                'call_id'           => $call->call_id,
+                'status'            => $call->status,
+                'report'            => $report,
+                'closing_message'   => $closingMessage,
+                'audio_base64'      => base64_encode($closingAudio['body']),
+                'audio_mime_type'   => $closingAudio['mime_type'],
+                'quotation_queued'  => $quotationQueued,
             ]);
         } catch (Throwable $throwable) {
             $status = $throwable->getCode();
