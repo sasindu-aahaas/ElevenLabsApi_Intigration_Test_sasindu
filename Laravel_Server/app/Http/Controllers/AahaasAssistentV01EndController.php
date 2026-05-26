@@ -57,7 +57,7 @@ class AahaasAssistentV01EndController extends Controller
                     $finalProfile,
                     $report,
                     $finalCategories
-                );
+                )->onQueue('aahaas-wa');
                 $quotationQueued = true;
             }
 

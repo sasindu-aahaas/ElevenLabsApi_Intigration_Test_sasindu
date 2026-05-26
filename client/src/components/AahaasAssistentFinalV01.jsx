@@ -109,7 +109,7 @@ export default function AahaasAssistentFinalV01() {
   const [serviceCategories, setServiceCategories] = useState([]);
   const [liveSummary, setLiveSummary] = useState("");
   const [finalReport, setFinalReport] = useState(null);
-  const [quotationStatus, setQuotationStatus] = useState(null); // null | { sent, api, email, error }
+  const [quotationStatus, setQuotationStatus] = useState(null); // null | { queued, error }
   const [testMessage, setTestMessage] = useState("");
   const [callEnded, setCallEnded] = useState(false);
   const [pulseLevel, setPulseLevel] = useState(0);
@@ -884,19 +884,13 @@ export default function AahaasAssistentFinalV01() {
       playHangupTone();
       stopCallDurationTimer();
 
-      const qSent = data.quotation_sent;
-      setQuotationStatus({
-        sent:  qSent,
-        api:   data.quotation_api,
-        email: data.quotation_email,
-        waId:  data.quotation_wa_id || "",
-        error: data.quotation_error || null,
-      });
+      const qQueued = data.quotation_queued === true;
+      setQuotationStatus({ queued: qQueued, error: null });
       addTerminalEntry(
-        qSent ? "info" : "api-err",
-        qSent
-          ? `Quotation sent — API: ${data.quotation_api ? "✓" : "✗"}  Email: ${data.quotation_email ? "✓" : "✗"}`
-          : `Quotation NOT sent${data.quotation_error ? ` — ${data.quotation_error}` : " (contacts missing?)"}`,
+        qQueued ? "info" : "api-err",
+        qQueued
+          ? "WhatsApp quotation queued — will be sent in background"
+          : "Quotation NOT queued (contacts missing or incomplete)",
       );
       addTerminalEntry("info", "Call ended — report ready");
 
@@ -1301,16 +1295,15 @@ export default function AahaasAssistentFinalV01() {
           </div>
           {quotationStatus ? (
             <div className="trip-summary-card" style={{
-              borderLeft: `3px solid ${quotationStatus.sent ? "#10b981" : "#ef4444"}`,
+              borderLeft: `3px solid ${quotationStatus.queued ? "#10b981" : "#ef4444"}`,
             }}>
-              <span style={{ color: quotationStatus.sent ? "#10b981" : "#ef4444" }}>
-                Quotation {quotationStatus.sent ? "Sent ✓" : "Not Sent ✗"}
+              <span style={{ color: quotationStatus.queued ? "#10b981" : "#ef4444" }}>
+                {quotationStatus.queued ? "WhatsApp Quotation Queued ✓" : "Quotation Not Sent ✗"}
               </span>
-              <p>
-                <strong>WhatsApp:</strong> {quotationStatus.api ? "Sent ✓" : "Not sent"}
-                {quotationStatus.waId ? <span style={{ color: "#6b7280", fontSize: 12 }}> (+{quotationStatus.waId})</span> : null}
-                &nbsp;&nbsp;
-                <strong>Email:</strong> {quotationStatus.email ? "Sent ✓" : "Not sent"}
+              <p style={{ fontSize: 12, color: "#9ca3af" }}>
+                {quotationStatus.queued
+                  ? "The quotation will be sent via WhatsApp within a few minutes."
+                  : "Contact details may be incomplete (name and WhatsApp number required)."}
               </p>
               {quotationStatus.error ? (
                 <p style={{ color: "#f87171", fontSize: 12 }}>{quotationStatus.error}</p>

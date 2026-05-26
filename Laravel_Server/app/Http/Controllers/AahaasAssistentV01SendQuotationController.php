@@ -52,7 +52,8 @@ class AahaasAssistentV01SendQuotationController extends Controller
                 ], 422);
             }
 
-            SendWhatsAppQuotationJob::dispatch($call->call_id, $customerProfile, $report, $serviceCategories);
+            SendWhatsAppQuotationJob::dispatch($call->call_id, $customerProfile, $report, $serviceCategories)
+                ->onQueue('aahaas-wa');
 
             return response()->json([
                 'call_id' => $call->call_id,
