@@ -21,7 +21,9 @@ class AahaasChatGpt3vPackagePrefetchController extends Controller
         $serviceCategories = is_array($call->service_categories) ? $call->service_categories : [];
 
         try {
-            if (! $service->isTravelRelated($serviceCategories)) {
+            $storedPrompt = trim((string) ($customerProfile['travel_package_prompt'] ?? ''));
+
+            if (! $service->isTravelRelated($serviceCategories) && $storedPrompt === '') {
                 return response()->json([
                     'call_id' => $call->call_id,
                     'package_lookup_status' => $customerProfile['package_lookup_status'] ?? '',

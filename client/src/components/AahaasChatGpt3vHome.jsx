@@ -57,6 +57,11 @@ function getPackageStatusLabel(customerProfile) {
   return "Not started";
 }
 
+function isProductSearching(customerProfile) {
+  const lookupStatus = customerProfile.package_lookup_status || "";
+  return lookupStatus === "queued" || lookupStatus === "pending";
+}
+
 function isTravelServiceCategory(category) {
   return [
     "Hotel Booking",
@@ -112,6 +117,40 @@ function formatVoiceLabel(voice) {
   return voice.charAt(0).toUpperCase() + voice.slice(1);
 }
 
+function getRuntimeSearchMessage(runtimeState) {
+  switch (runtimeState) {
+    case "start":
+      return "Aahaas API search is starting now.";
+    case "running":
+      return "Aahaas API search is running now.";
+    case "paused":
+      return "Aahaas API search is waiting or paused.";
+    case "stop":
+      return "Aahaas API search has been stopped for closeout.";
+    case "done":
+      return "Aahaas API search completed successfully.";
+    case "error":
+      return "Aahaas API search failed or returned an error.";
+    default:
+      return "Aahaas API is idle and waiting for the next product search.";
+  }
+}
+
+function buildTerminalEntry(level, state, message, meta = {}) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    level,
+    state,
+    message,
+    meta,
+    timestamp: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  };
+}
+
 export default function AahaasChatGpt3vHome() {
   const [callId, setCallId] = useState("");
   const [callStatus, setCallStatus] = useState("Ready to start AaHAAs ChatGPT 3v.");
@@ -131,6 +170,15 @@ export default function AahaasChatGpt3vHome() {
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [voiceLabel, setVoiceLabel] = useState("Marin");
   const [selectedVoice, setSelectedVoice] = useState("marin");
+  const [speechSpeed, setSpeechSpeed] = useState(1.1);
+  const [agentVolume, setAgentVolume] = useState(0.95);
+  const [musicVolume, setMusicVolume] = useState(0.18);
+  const [micSensitivity, setMicSensitivity] = useState(10);
+  const [terminalFeed, setTerminalFeed] = useState(() => [
+    buildTerminalEntry("idle", "ready", "Aahaas runtime terminal ready.", { service: "aahaas-chatgpt-3v" }),
+  ]);
+  const [searchRuntimeState, setSearchRuntimeState] = useState("idle");
+  const [searchRuntimeId, setSearchRuntimeId] = useState("AHS-IDLE");
 
   const mainAudioRef = useRef(null);
   const mainAudioUrlRef = useRef("");
@@ -154,6 +202,7 @@ export default function AahaasChatGpt3vHome() {
   const packagePrefetchStartedRef = useRef(false);
   const packageWaitPollRef = useRef(0);
   const ambientMusicRef = useRef(null);
+  const searchRuntimeIdRef = useRef("AHS-IDLE");
 
   const callSupported =
     typeof window !== "undefined" &&
@@ -169,18 +218,18 @@ export default function AahaasChatGpt3vHome() {
 
     if (phase === "ringing" || phase === "connecting") {
       initAmbientMusic();
-      setAmbientVolume(0.05, 2.2);
+      setAmbientVolume(musicVolume * 0.25, 2.2);
     } else if (phase === "processing") {
       initAmbientMusic();
-      setAmbientVolume(0.2, 3.2);
+      setAmbientVolume(musicVolume, 3.2);
     } else if (phase === "assistant-speaking") {
-      setAmbientVolume(0.04, 1.1);
+      setAmbientVolume(musicVolume * 0.2, 1.1);
     } else if (phase === "listening") {
       setAmbientVolume(0.001, 0.5);
     } else if (phase === "idle" || phase === "completed" || phase === "ending") {
       destroyAmbientMusic();
     }
-  }, [musicEnabled, phase]);
+  }, [musicEnabled, phase, musicVolume]);
 
   useEffect(() => {
     return () => {
@@ -196,6 +245,48 @@ export default function AahaasChatGpt3vHome() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (mainAudioRef.current) {
+      mainAudioRef.current.volume = agentVolume;
+    }
+  }, [agentVolume]);
+
+  useEffect(() => {
+    if (holdAudioRef.current) {
+      holdAudioRef.current.volume = Math.max(0.12, musicVolume);
+    }
+  }, [musicVolume]);
+
+  useEffect(() => {
+    if (!error) return;
+    appendTerminalEntry("error", "error", error, {
+      runtime_id: searchRuntimeIdRef.current,
+      phase,
+    });
+  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function appendTerminalEntry(level, state, message, meta = {}) {
+    setTerminalFeed((current) => [
+      buildTerminalEntry(level, state, message, meta),
+      ...current,
+    ].slice(0, 18));
+  }
+
+  function setRuntimeState(nextState, message, meta = {}) {
+    setSearchRuntimeState(nextState);
+    appendTerminalEntry(nextState === "error" ? "error" : "info", nextState, message, {
+      runtime_id: searchRuntimeIdRef.current,
+      ...meta,
+    });
+  }
+
+  function createSearchRuntimeId() {
+    const nextId = `AHS-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    searchRuntimeIdRef.current = nextId;
+    setSearchRuntimeId(nextId);
+    return nextId;
+  }
 
   function getAudioContext() {
     if (typeof window === "undefined") return null;
@@ -352,6 +443,7 @@ export default function AahaasChatGpt3vHome() {
   async function playAgentAudio(audioUrl, onEnded) {
     if (mainAudioRef.current) mainAudioRef.current.pause();
     const audio = new Audio(audioUrl);
+    audio.volume = agentVolume;
     mainAudioRef.current = audio;
     mainAudioUrlRef.current = audioUrl;
     setPhase("assistant-speaking");
@@ -372,6 +464,7 @@ export default function AahaasChatGpt3vHome() {
     if (!holdAudioUrlRef.current) return;
     if (holdAudioRef.current) holdAudioRef.current.pause();
     const audio = new Audio(holdAudioUrlRef.current);
+    audio.volume = Math.max(0.12, musicVolume);
     holdAudioRef.current = audio;
     await audio.play().catch(() => {
       holdAudioRef.current = null;
@@ -415,6 +508,12 @@ export default function AahaasChatGpt3vHome() {
     setPulseLevel(0);
     setListeningHint("");
     setVoiceLabel(formatVoiceLabel(selectedVoice));
+    searchRuntimeIdRef.current = "AHS-IDLE";
+    setSearchRuntimeId("AHS-IDLE");
+    setSearchRuntimeState("idle");
+    setTerminalFeed([
+      buildTerminalEntry("idle", "ready", "Aahaas runtime terminal reset.", { service: "aahaas-chatgpt-3v" }),
+    ]);
   }
 
   async function handleStartCall() {
@@ -424,6 +523,8 @@ export default function AahaasChatGpt3vHome() {
       autoLoopEnabledRef.current = true;
       setError("");
       setCallEnded(false);
+      const runtimeId = createSearchRuntimeId();
+      setRuntimeState("start", "Aahaas session boot started.", { runtime_id: runtimeId });
       setPhase("ringing");
       setCallStatus("Calling Aahaas. Please wait while we connect the assistant.");
       playRingTone();
@@ -431,12 +532,13 @@ export default function AahaasChatGpt3vHome() {
       await new Promise((resolve) => window.setTimeout(resolve, 1600));
       setPhase("connecting");
       setCallStatus("Connecting you to AaHAAs ChatGPT 3v now...");
+      setRuntimeState("running", "Voice session connecting to Aahaas runtime.", { phase: "connecting" });
       playConnectTone();
 
       const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voice: selectedVoice }),
+        body: JSON.stringify({ voice: selectedVoice, speech_speed: speechSpeed }),
       });
 
       const data = await response.json().catch(() => ({}));
@@ -449,6 +551,10 @@ export default function AahaasChatGpt3vHome() {
       setConversation(data.greeting ? [{ role: "assistant", content: data.greeting }] : []);
       setCallStatus("Connected. The AI receptionist is greeting you.");
       setVoiceLabel(formatVoiceLabel(data.voice_label || selectedVoice));
+      setRuntimeState("running", "Aahaas runtime connected and greeting started.", {
+        call_id: data.call_id || "",
+        voice: data.voice_label || selectedVoice,
+      });
 
       if (data.hold_audio_base64) {
         holdAudioUrlRef.current = createAudioUrlFromBase64(data.hold_audio_base64, data.hold_audio_mime_type);
@@ -463,6 +569,7 @@ export default function AahaasChatGpt3vHome() {
       setPhase("idle");
       setError(err.message);
       setCallStatus("The call could not be started.");
+      setRuntimeState("error", "Aahaas session start failed.", { phase: "idle" });
     }
   }
 
@@ -474,6 +581,7 @@ export default function AahaasChatGpt3vHome() {
       setPhase("listening");
       setCallStatus("Listening for your answer now.");
       setListeningHint(profile.hint);
+      setRuntimeState("paused", "Runtime paused for customer speech input.", { phase: "listening" });
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
@@ -511,6 +619,7 @@ export default function AahaasChatGpt3vHome() {
       setError(err.message || "Microphone access failed.");
       setCallStatus("Microphone access is required for the call.");
       setPhase("idle");
+      setRuntimeState("error", "Microphone access failed for runtime input.", { phase: "idle" });
     }
   }
 
@@ -545,7 +654,7 @@ export default function AahaasChatGpt3vHome() {
       setPulseLevel(Math.min(1, average / 80));
       captureElapsedMsRef.current += 120;
 
-      if (average > 10) {
+      if (average > micSensitivity) {
         speakingDetectedRef.current = true;
         silenceMsRef.current = 0;
       } else {
@@ -596,6 +705,7 @@ export default function AahaasChatGpt3vHome() {
     try {
       setPhase("processing");
       setCallStatus("Checking if you are still there...");
+      setRuntimeState("running", "Runtime is checking silent input state.", { phase: "processing" });
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
@@ -618,6 +728,7 @@ export default function AahaasChatGpt3vHome() {
         if (autoLoopEnabledRef.current) await beginListening();
       });
     } catch {
+      setRuntimeState("error", "Silent input check failed; returning to listening state.");
       if (autoLoopEnabledRef.current) await beginListening();
     }
   }
@@ -626,6 +737,9 @@ export default function AahaasChatGpt3vHome() {
     if (!callIdRef.current || packagePrefetchStartedRef.current) return;
 
     packagePrefetchStartedRef.current = true;
+    setRuntimeState("start", "Aahaas API product search queued.", {
+      call_id: callIdRef.current,
+    });
 
     try {
       await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-prefetch`, {
@@ -633,8 +747,14 @@ export default function AahaasChatGpt3vHome() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current }),
       });
+      setRuntimeState("running", "Aahaas API product search request sent.", {
+        call_id: callIdRef.current,
+      });
     } catch {
       packagePrefetchStartedRef.current = false;
+      setRuntimeState("error", "Aahaas API product search request failed to start.", {
+        call_id: callIdRef.current,
+      });
     }
   }
 
@@ -644,6 +764,10 @@ export default function AahaasChatGpt3vHome() {
     try {
       setPhase("processing");
       setCallStatus("Waiting for Aahaas product options. Please hold for a moment.");
+      setRuntimeState("running", "Aahaas API search is running.", {
+        call_id: callIdRef.current,
+        phase: "processing",
+      });
       await playHoldAudioLoop();
 
       const poll = async () => {
@@ -657,10 +781,15 @@ export default function AahaasChatGpt3vHome() {
         if (!response.ok) throw new Error(data.message || "Could not check package status.");
 
         if (!data.ready && !data.failed) {
+          setRuntimeState("paused", "Aahaas API search is still pending.", {
+            call_id: callIdRef.current,
+            api_state: data.package_lookup_status || "pending",
+          });
           packageWaitPollRef.current = window.setTimeout(() => {
             poll().catch(async (err) => {
               stopHoldAudioLoop();
               setError(err.message);
+              setRuntimeState("error", "Aahaas API polling failed.", { call_id: callIdRef.current });
               if (autoLoopEnabledRef.current) await beginListening();
             });
           }, 2500);
@@ -679,6 +808,12 @@ export default function AahaasChatGpt3vHome() {
         lastReplyRef.current = data.reply || "";
         setLastReply(data.reply || "");
         setVoiceLabel(formatVoiceLabel(data.voice_label));
+        setRuntimeState(data.failed ? "error" : "done", data.failed
+          ? "Aahaas API returned an error state."
+          : "Aahaas API search completed successfully.", {
+          call_id: callIdRef.current,
+          api_state: data.package_lookup_status || "",
+        });
 
         const replyUrl = createAudioUrlFromBase64(data.audio_base64, data.audio_mime_type);
         await playAgentAudio(replyUrl, async () => {
@@ -705,6 +840,7 @@ export default function AahaasChatGpt3vHome() {
       stopHoldAudioLoop();
       setError(err.message);
       setCallStatus("We could not finish checking the Aahaas package yet.");
+      setRuntimeState("error", "Aahaas API wait cycle failed.", { call_id: callIdRef.current });
       if (autoLoopEnabledRef.current) await beginListening();
     }
   }
@@ -713,6 +849,10 @@ export default function AahaasChatGpt3vHome() {
     try {
       setPhase("processing");
       setCallStatus("Aahaas is reviewing the request and preparing the next question.");
+      setRuntimeState("running", "Runtime is processing customer request.", {
+        call_id: callIdRef.current,
+        phase: "processing",
+      });
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
@@ -736,11 +876,12 @@ export default function AahaasChatGpt3vHome() {
       setServiceCategories(data.service_categories || []);
       setLiveSummary(data.live_summary || "");
       setVoiceLabel(formatVoiceLabel(data.voice_label));
+      setRuntimeState("running", "Runtime received turn result from Aahaas flow.", {
+        call_id: callIdRef.current,
+        api_state: data.package_lookup_status || "none",
+      });
 
-      if (
-        data.package_lookup_status === "queued" &&
-        (data.service_categories || []).some(isTravelServiceCategory)
-      ) {
+      if (data.package_lookup_status === "queued") {
         startPackagePrefetch();
       }
 
@@ -761,6 +902,7 @@ export default function AahaasChatGpt3vHome() {
       setError(err.message);
       setCallStatus("There was a temporary issue, but the call is still open. Please continue when you are ready.");
       setPhase("connected");
+      setRuntimeState("error", "Runtime turn processing failed.", { call_id: callIdRef.current });
     }
   }
 
@@ -779,6 +921,9 @@ export default function AahaasChatGpt3vHome() {
       stopMicrophone();
       setPhase("ending");
       setCallStatus("Finalizing your call report and closing the conversation...");
+      setRuntimeState("stop", "Runtime is finalizing booking and closing session.", {
+        call_id: callIdRef.current,
+      });
 
       const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/end`, {
         method: "POST",
@@ -795,6 +940,9 @@ export default function AahaasChatGpt3vHome() {
       setVoiceLabel(formatVoiceLabel(data.voice_label));
       setCallEnded(true);
       setCallStatus("The call has ended and the report was created successfully.");
+      setRuntimeState("done", "Runtime completed and final report saved.", {
+        call_id: callIdRef.current,
+      });
       playHangupTone();
 
       const closingUrl = createAudioUrlFromBase64(data.audio_base64, data.audio_mime_type);
@@ -805,6 +953,9 @@ export default function AahaasChatGpt3vHome() {
       setError(err.message);
       setCallStatus("The live call ended, but the final report could not be saved yet.");
       setPhase("completed");
+      setRuntimeState("error", "Runtime finished with report save failure.", {
+        call_id: callIdRef.current,
+      });
     } finally {
       finalizingRef.current = false;
     }
@@ -828,8 +979,7 @@ export default function AahaasChatGpt3vHome() {
   }
 
   const profileFields = [
-    ["Full name", customerProfile.full_name],
-    ["Contact number", customerProfile.contact_number],
+    ["WhatsApp", customerProfile.whatsapp_number],
     ["Email", customerProfile.email_address],
     ["Country", customerProfile.current_living_country],
     ["Travelers", customerProfile.traveler_count || customerProfile.number_of_travelers],
@@ -840,6 +990,7 @@ export default function AahaasChatGpt3vHome() {
 
   const packageStatusLabel = getPackageStatusLabel(customerProfile);
   const packageIssue = customerProfile.package_lookup_error || "";
+  const searchingProduct = isProductSearching(customerProfile) || phase === "processing";
 
   return (
     <div className="panel reception-panel">
@@ -849,9 +1000,8 @@ export default function AahaasChatGpt3vHome() {
           <p className="eyebrow">OpenAI Voice</p>
           <h2>AaHAAs ChatGPT 3v</h2>
           <p className="panel-copy reception-copy">
-            This is the cloned home receptionist flow. It keeps ChatGPT reasoning and reporting,
-            removes ElevenLabs playback, uses OpenAI voice output, and applies travel defaults
-            when the caller does not specify them.
+            This is the cloned Aahaas product search flow. It keeps the conversation short,
+            searches the best fitting Aahaas package or product first, and asks for changes only after the summary.
           </p>
         </div>
         <span className="call-badge reception-badge">Home page flow</span>
@@ -882,6 +1032,51 @@ export default function AahaasChatGpt3vHome() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="reception-slider-control">
+          <span>Voice speed {speechSpeed.toFixed(2)}x</span>
+          <input
+            type="range"
+            min="0.8"
+            max="1.5"
+            step="0.05"
+            value={speechSpeed}
+            onChange={(event) => setSpeechSpeed(Number(event.target.value))}
+            disabled={phase !== "idle"}
+          />
+        </label>
+        <label className="reception-slider-control">
+          <span>Output volume {Math.round(agentVolume * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={agentVolume}
+            onChange={(event) => setAgentVolume(Number(event.target.value))}
+          />
+        </label>
+        <label className="reception-slider-control">
+          <span>Music level {Math.round(musicVolume * 100)}%</span>
+          <input
+            type="range"
+            min="0"
+            max="0.5"
+            step="0.01"
+            value={musicVolume}
+            onChange={(event) => setMusicVolume(Number(event.target.value))}
+          />
+        </label>
+        <label className="reception-slider-control">
+          <span>Mic sensitivity {micSensitivity}</span>
+          <input
+            type="range"
+            min="6"
+            max="20"
+            step="1"
+            value={micSensitivity}
+            onChange={(event) => setMicSensitivity(Number(event.target.value))}
+          />
         </label>
         <div className="reception-inline-meta">
           <span className="reception-mini-chip">Voice: {voiceLabel}</span>
@@ -947,6 +1142,40 @@ export default function AahaasChatGpt3vHome() {
         </div>
       </div>
 
+      <div className={`trip-summary-card reception-search-card ${searchingProduct ? "reception-search-card-active" : ""}`}>
+        <span>Aahaas product search</span>
+        <div className="reception-search-row">
+          <div className="reception-search-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <p>
+            {getRuntimeSearchMessage(searchRuntimeState)}
+          </p>
+        </div>
+      </div>
+
+      <div className={`trip-summary-card terminal-card terminal-state-${searchRuntimeState}`}>
+        <div className="terminal-card-head">
+          <span>Aahaas Runtime Terminal</span>
+          <strong>{searchRuntimeId}</strong>
+        </div>
+        <div className="terminal-card-subhead">
+          <span>Current state</span>
+          <strong>{searchRuntimeState}</strong>
+        </div>
+        <div className="terminal-log" aria-live="polite">
+          {terminalFeed.map((entry) => (
+            <article key={entry.id} className={`terminal-line terminal-line-${entry.level}`}>
+              <span className="terminal-time">{entry.timestamp}</span>
+              <span className="terminal-state">{entry.state}</span>
+              <p>{entry.message}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
       <div className="trip-summary-card reception-test-card">
         <span>Quick test chat</span>
         <p>Use this text box if you want to simulate caller answers without the microphone.</p>
@@ -972,8 +1201,8 @@ export default function AahaasChatGpt3vHome() {
         <div className="conversation-log reception-log" aria-live="polite">
           {conversation.length === 0 ? (
             <p className="empty-state">
-              Start the call and the assistant will collect caller details and travel requirements
-              one natural question at a time.
+              Start the call and the assistant will search the best matching Aahaas package or
+              product first, then ask only whether anything needs to change.
             </p>
           ) : (
             conversation.map((message, index) => (

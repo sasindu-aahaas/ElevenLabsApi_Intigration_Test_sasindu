@@ -30,13 +30,14 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
         'cove' => 'cedar',
     ];
 
-    public function initializeCustomerProfile(?string $selectedVoice = null): array
+    public function initializeCustomerProfile(?string $selectedVoice = null, ?float $speechSpeed = null): array
     {
         $voiceId = $this->normalizeVoiceSelection($selectedVoice);
 
         return [
             'package_state' => 'not_started',
             'assistant_voice_id' => $voiceId,
+            'assistant_speech_speed' => $this->normalizeSpeechSpeed($speechSpeed),
         ];
     }
 
@@ -48,9 +49,9 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
     public function buildGreeting(string $callId): string
     {
         $variants = [
-            'Hello, welcome to Aahaas. I can help with your travel booking today. Where would you like to go?',
-            'Good day and welcome to Aahaas. I can help arrange your trip. Which destination do you have in mind?',
-            'Hello from Aahaas. I can help with your booking today. What destination would you like us to plan for you?',
+            'Hello, welcome to Aahaas. Tell me what you want, and I will search the best matching product for you.',
+            'Good day and welcome to Aahaas. Tell me what you need, and I will check the best matching Aahaas product for you.',
+            'Hello from Aahaas. Tell me what you want, and I will search the best Aahaas option for you.',
         ];
 
         return $variants[array_rand($variants)];
@@ -59,8 +60,8 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
     public function buildHoldMessage(): string
     {
         $variants = [
-            'I am preparing the best option for you now. Please stay with me for a moment.',
-            'I am checking the package details for you now. Please hold for a brief moment.',
+            'I am searching the best Aahaas product for you now. Please hold for a moment.',
+            'I am checking the best matching Aahaas option now. Please stay with me for a moment.',
         ];
 
         return $variants[array_rand($variants)];
@@ -69,8 +70,8 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
     public function buildClosingMessage(): string
     {
         $variants = [
-            'Thank you for calling Aahaas. We will send your travel details by WhatsApp shortly.',
-            'Thanks for choosing Aahaas. Our team will share the booking details with you very soon on WhatsApp.',
+            'Thank you for calling Aahaas. We will send your booking details shortly.',
+            'Thanks for choosing Aahaas. Our team will share the booking details with you very soon.',
         ];
 
         return $variants[array_rand($variants)];
@@ -79,8 +80,8 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
     public function buildPackageFailureCallbackReply(): string
     {
         $variants = [
-            'Our Aahaas package service is busy right now, but I have your requirements and our team will contact you with the best option shortly.',
-            'The package system is temporarily busy, but we have your travel requirements and our team will contact you with the best available option very soon.',
+            'Our Aahaas package service is busy right now, but I have your request and our team will contact you with the best option shortly.',
+            'The package system is temporarily busy, but I have your travel request and our team will contact you with the best available option very soon.',
         ];
 
         return $variants[array_rand($variants)];
@@ -89,11 +90,22 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
     public function buildPackageDetailsPendingReply(): string
     {
         $variants = [
-            'I am still waiting for the Aahaas package result, so I do not want to guess the package details. Let me confirm one more requirement while that is loading.',
-            'The Aahaas package details are still loading, so I will not give you guessed package information. Let me confirm one more detail while we wait.',
+            'I am still waiting for the Aahaas package result, so I do not want to guess the package details. Please hold while I check it.',
+            'The Aahaas package details are still loading, so I will not guess the package information. Please hold while I check it.',
         ];
 
         return $variants[array_rand($variants)];
+    }
+
+    public function looksLikeSearchableRequest(string $text): bool
+    {
+        $normalized = strtolower(trim($text));
+
+        if ($normalized === '' || mb_strlen($normalized) < 4) {
+            return false;
+        }
+
+        return true;
     }
 
     public function buildFinalReport(array $history = [], array $customerProfile = [], array $serviceCategories = []): array
@@ -173,10 +185,13 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
 
     public function shouldWaitForPackage(array $customerProfile, array $serviceCategories): bool
     {
-        return parent::shouldWaitForPackage(
-            $this->applyDefaultTravelAssumptions($customerProfile, $serviceCategories),
-            $serviceCategories
-        );
+        $customerProfile = $this->applyDefaultTravelAssumptions($customerProfile, $serviceCategories);
+        $lookupStatus = trim((string) ($customerProfile['package_lookup_status'] ?? ''));
+        $storedPrompt = trim((string) ($customerProfile['travel_package_prompt'] ?? ''));
+
+        return ($this->isTravelRelated($serviceCategories) || $storedPrompt !== '')
+            && in_array($lookupStatus, ['queued', 'pending'], true)
+            && $storedPrompt !== '';
     }
 
     public function hasEnoughTravelRequirements(array $customerProfile): bool
@@ -202,14 +217,15 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
         $voiceModel = env('OPENAI_VOICE_MODEL', 'gpt-4o-mini-tts');
         $voiceInstructions = $instructions ?: env(
             'OPENAI_RECEPTION_VOICE_INSTRUCTIONS',
-            'Speak like a warm Aahaas travel receptionist on a live phone call. Keep the delivery clear, natural, upbeat, and fast.'
+            'Speak like a warm Aahaas travel receptionist on a live phone call. Keep the delivery clear, natural, upbeat, and fast. Use short spoken phrasing.'
         );
+        $speechSpeed = $this->normalizeSpeechSpeed($customerProfile['assistant_speech_speed'] ?? null);
 
         $voiceId = $this->normalizeVoiceSelection((string) ($customerProfile['assistant_voice_id'] ?? ''));
         $response = Http::withToken($openAiApiKey)
             ->timeout(120)
             ->withHeaders([
-                'Accept' => 'audio/wav',
+                'Accept' => 'audio/mpeg',
                 'Content-Type' => 'application/json',
             ])
             ->asJson()
@@ -219,6 +235,7 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
                 'input' => $text,
                 'instructions' => $voiceInstructions,
                 'response_format' => 'wav',
+                'speed' => $speechSpeed,
             ]);
 
         if ($response->failed()) {
@@ -250,28 +267,40 @@ CALL STYLE:
 - Keep replies short for voice playback: one or two brief sentences.
 - Ask exactly one clear follow-up question each turn.
 - Do not say robotic phrases like "I noted that down" or "I recorded that."
+- Keep every spoken reply low-latency and concise.
 
 DEFAULT TRAVEL ASSUMPTIONS:
 - If the caller wants a hotel or travel booking but does not clearly specify traveler count, assume 2 travelers.
 - If hotel class is not clearly given, assume a 3-star hotel.
 - If duration is not clearly given, assume 3 days.
 - If start timing is not clearly given, assume the trip starts 7 days from today.
-- Use these defaults without repeatedly asking for them, unless the caller later changes them.
+- If activities are not clearly given, assume standard sightseeing suitable for the destination.
+- Use these defaults silently without asking extra questions about them, unless the caller later asks to change them.
 
 FLOW:
-1. Understand the main travel or support request.
-2. Collect missing contact details naturally: full name, contact number, email address, and current living country.
-3. For travel requests, identify the destination first, then gather only the most important missing detail each turn.
-4. When enough travel information exists, prepare a package prompt.
-5. Present package options naturally only when known_package_offer is available from the Aahaas API.
-6. If known_package_offer is missing or the Aahaas API is unavailable, never invent package names, hotels, prices, room types, or itineraries. Continue collecting the customer's full requirements and explain that the team will contact them with the best option.
-7. End only after the caller confirms they are done.
+1. Start with one simple opening only. Do not begin with many questions.
+2. If the customer tells you what they want, use that request immediately to check the Aahaas API for the best matching package or product.
+3. If the customer shares a name, store it and use it naturally. If they do not share a name, do not push for it.
+4. Do not ask unnecessary preference questions like relaxed sightseeing, active plan, or similar extra discovery questions. Just search the best fit first.
+5. If the request is travel-related, do not ask unnecessary planning questions like traveler count, number of days, when it starts, activities, or hotel class if the customer did not mention them. Use the defaults instead.
+6. Present package or product options naturally only when known_package_offer is available from the Aahaas API.
+7. After reading the package or booking summary, ask one simple question only: does anything need to change.
+7. If the customer wants changes, update only the parts they asked to change. Do not ask unrelated questions.
+8. Only after the customer confirms the booking summary, ask for WhatsApp and email details.
+9. If known_package_offer is missing or the Aahaas API is unavailable, never invent package names, hotels, prices, room types, itineraries, or product details. Simply say the Aahaas service is busy, keep the customer request as given, and say the Aahaas team will contact them with the best option.
+10. End only after the customer confirms they are done.
 
 PACKAGE SAFETY:
 - Only package details from known_package_offer may be spoken as a real package recommendation.
 - Never guess or fabricate package content.
 - If the package system is still loading, say you are waiting for the Aahaas package result and continue collecting requirements.
 - If the package system fails, apologize briefly, collect any missing requirements, and say the Aahaas team will contact the customer with the best available option.
+
+CONTACT TIMING:
+- Do not ask for contact details at the beginning of trip planning.
+- Ask for WhatsApp and email only after the travel plan summary is confirmed or when the package API is unavailable and the team needs to follow up.
+- Do not ask for traveler count, duration, hotel class, or start date if the customer did not explicitly mention them and the defaults are sufficient.
+- If the customer gives their name naturally, use it. If not, continue without making it a blocker.
 
 Always return strict JSON with exactly these keys: reply, customer_profile, service_categories, should_end, ended_reason, live_summary, needs_travel_package, travel_package_prompt, package_confirmation_status.
 PROMPT;
@@ -303,6 +332,12 @@ PROMPT;
             $customerProfile['hotel_rating_preference'] = '3-star hotel';
             $customerProfile['hotel_category'] = '3-star hotel';
             $assumptions[] = 'hotel_rating_default_3_star';
+        }
+
+        if (trim((string) ($customerProfile['activities_preference'] ?? $customerProfile['activity_preference'] ?? '')) === '') {
+            $customerProfile['activities_preference'] = 'standard sightseeing';
+            $customerProfile['activity_preference'] = 'standard sightseeing';
+            $assumptions[] = 'activities_default_standard_sightseeing';
         }
 
         if (trim((string) ($customerProfile['travel_date_range'] ?? $customerProfile['planned_travel_date_range'] ?? '')) === '') {
@@ -350,5 +385,20 @@ PROMPT;
         }
 
         return 'marin';
+    }
+
+    private function normalizeSpeechSpeed(mixed $speed): float
+    {
+        $normalized = is_numeric($speed) ? (float) $speed : 1.0;
+
+        if ($normalized < 0.25) {
+            return 0.25;
+        }
+
+        if ($normalized > 2.0) {
+            return 2.0;
+        }
+
+        return round($normalized, 2);
     }
 }

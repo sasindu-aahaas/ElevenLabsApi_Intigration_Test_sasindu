@@ -128,7 +128,36 @@ class AiAssistentFinalTestService extends ElevenLabsReceptionCallService
 
     public function buildTranscriptionRecoveryReply(): string
     {
-        return 'I did not catch that clearly. Please say it again in your own words, and I will continue from there.';
+        $payload = [
+            [
+                'role' => 'developer',
+                'content' => 'Return valid JSON with exactly one key: reply. Generate one short, natural Aahaas phone-agent sentence for when the caller audio was unclear. It should politely ask the caller to repeat, sound human, and stay under 20 words.',
+            ],
+            [
+                'role' => 'user',
+                'content' => json_encode([
+                    'situation' => 'The latest caller audio could not be transcribed clearly.',
+                    'goal' => 'Ask the caller to repeat naturally without sounding robotic.',
+                ], JSON_UNESCAPED_SLASHES),
+            ],
+        ];
+
+        try {
+            $raw = $this->sendResponsesRequest($payload);
+            $decoded = $this->decodeJsonObject($raw);
+            $reply = trim((string) ($decoded['reply'] ?? ''));
+
+            if ($reply !== '') {
+                return $reply;
+            }
+        } catch (\Throwable) {
+            // Fall through to the emergency fallback below only if generation fails.
+        }
+
+        return trim((string) env(
+            'AAHAAS_TRANSCRIPTION_RECOVERY_FALLBACK',
+            'Sorry, the line was unclear. Could you please say that once more?'
+        ));
     }
 
     public function generateTurn(array $history = [], array $customerProfile = [], array $serviceCategories = []): array

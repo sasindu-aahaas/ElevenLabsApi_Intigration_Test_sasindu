@@ -91,6 +91,7 @@ class AahaasChatGpt3vTurnController extends Controller
             $packageFeedback = $service->detectPackageFeedback($transcript);
             $packageHistory = is_array($mergedProfile['package_history'] ?? null) ? $mergedProfile['package_history'] : [];
             $packageLookupStatus = trim((string) ($mergedProfile['package_lookup_status'] ?? ''));
+            $shouldForceEarlyPackageLookup = $service->looksLikeSearchableRequest($transcript);
 
             if ($packageState !== '') {
                 $mergedProfile['package_state'] = $packageState;
@@ -120,8 +121,6 @@ class AahaasChatGpt3vTurnController extends Controller
                     $packageLookupStatus === 'ready'
                     && isset($mergedProfile['suggested_package'])
                     && ($mergedProfile['package_state'] ?? '') !== 'offered'
-                    && $service->hasEnoughTravelRequirements($mergedProfile)
-                    && $service->hasRequiredContactDetails($mergedProfile)
                 ) {
                     $packageReply = $service->formatPackageOfferReply($mergedProfile['suggested_package']);
                     $reply = $packageReply;
@@ -138,10 +137,15 @@ class AahaasChatGpt3vTurnController extends Controller
                 } else {
                     $packagePrompt = $service->buildEarlyPackagePrompt($mergedProfile, $transcript, $mergedCategories);
 
-                    if ($packagePrompt !== '' && $packageLookupStatus === '') {
+                    if (
+                        $packagePrompt !== ''
+                        && $packageLookupStatus === ''
+                        && ($shouldForceEarlyPackageLookup || $service->isTravelRelated($mergedCategories))
+                    ) {
                         $mergedProfile['travel_package_prompt'] = $packagePrompt;
                         $mergedProfile['package_lookup_status'] = 'queued';
                         $mergedProfile['package_state'] = $mergedProfile['package_state'] ?? 'pending';
+                        $reply = $service->buildHoldMessage();
                     }
 
                     $detailKeywords = ['detail', 'include', "what's in", 'whats in', 'price', 'cost', 'how much', 'tell me more', 'what does', 'itinerary', 'activities', 'flight', 'hotel', 'accommodation', 'package'];

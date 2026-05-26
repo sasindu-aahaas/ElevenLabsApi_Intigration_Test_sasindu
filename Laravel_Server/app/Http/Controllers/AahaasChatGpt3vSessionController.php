@@ -16,9 +16,13 @@ class AahaasChatGpt3vSessionController extends Controller
         try {
             $validated = $request->validate([
                 'voice' => ['nullable', 'string'],
+                'speech_speed' => ['nullable', 'numeric'],
             ]);
 
-            $customerProfile = $service->initializeCustomerProfile($validated['voice'] ?? null);
+            $customerProfile = $service->initializeCustomerProfile(
+                $validated['voice'] ?? null,
+                isset($validated['speech_speed']) ? (float) $validated['speech_speed'] : null
+            );
             $call = ServiceCall::create([
                 'call_id' => 'CALL-' . strtoupper(Str::random(10)),
                 'status' => 'active',

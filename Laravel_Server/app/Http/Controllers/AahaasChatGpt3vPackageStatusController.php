@@ -56,8 +56,6 @@ class AahaasChatGpt3vPackageStatusController extends Controller
             if (
                 $status === 'ready'
                 && isset($customerProfile['suggested_package'])
-                && $service->hasRequiredContactDetails($customerProfile)
-                && $service->hasEnoughTravelRequirements($customerProfile)
             ) {
                 $reply = $service->formatPackageOfferReply($customerProfile['suggested_package']);
                 $speech = $service->synthesizeSpeechForProfile($reply, $customerProfile);
