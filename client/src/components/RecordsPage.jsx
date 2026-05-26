@@ -40,6 +40,7 @@ export default function RecordsPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const [quotationStatus, setQuotationStatus] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +109,38 @@ export default function RecordsPage() {
 
   function downloadRecord(recordType, publicId) {
     window.open(`${API_BASE_URL}/records/${recordType}/${publicId}/download`, "_blank", "noopener,noreferrer");
+  }
+
+  async function sendQuotation(publicId) {
+    setQuotationStatus((prev) => ({ ...prev, [publicId]: { loading: true, sent: false, error: null } }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/send-quotation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ call_id: publicId }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || `Server error ${response.status}`);
+      }
+
+      setQuotationStatus((prev) => ({
+        ...prev,
+        [publicId]: {
+          loading: false,
+          sent: data.quotation_api,
+          error: data.error || null,
+        },
+      }));
+    } catch (err) {
+      setQuotationStatus((prev) => ({
+        ...prev,
+        [publicId]: { loading: false, sent: false, error: err.message },
+      }));
+    }
   }
 
   return (
@@ -196,7 +229,31 @@ export default function RecordsPage() {
                     >
                       Download
                     </button>
+                    {record.record_type === "service_call" ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={quotationStatus[record.public_id]?.loading}
+                        onClick={() => sendQuotation(record.public_id)}
+                        style={{ minWidth: "130px" }}
+                      >
+                        {quotationStatus[record.public_id]?.loading ? "Sending…" : "Send Quotation"}
+                      </button>
+                    ) : null}
                   </div>
+                  {quotationStatus[record.public_id] && !quotationStatus[record.public_id].loading ? (
+                    <div className="quotation-status-row" style={{ marginTop: "8px", fontSize: "0.8rem" }}>
+                      {quotationStatus[record.public_id].sent ? (
+                        <span style={{ color: "#22c55e" }}>
+                          WhatsApp quotation sent ✓
+                        </span>
+                      ) : (
+                        <span style={{ color: "#ef4444" }}>
+                          {quotationStatus[record.public_id].error || "Send failed"}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

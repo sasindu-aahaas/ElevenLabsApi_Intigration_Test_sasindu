@@ -1,23 +1,47 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_LARAVEL_API_BASE_URL || "http://localhost:8000/api";
 
+const OPENAI_VOICES = [
+  { value: "alloy",   label: "Alloy — Neutral, balanced" },
+  { value: "ash",     label: "Ash — Warm, casual" },
+  { value: "ballad",  label: "Ballad — Smooth, storytelling" },
+  { value: "coral",   label: "Coral — Professional, upbeat (default)" },
+  { value: "echo",    label: "Echo — Clear, resonant" },
+  { value: "fable",   label: "Fable — Expressive, dynamic" },
+  { value: "nova",    label: "Nova — Bright, energetic" },
+  { value: "onyx",    label: "Onyx — Deep, authoritative" },
+  { value: "sage",    label: "Sage — Calm, thoughtful" },
+  { value: "shimmer", label: "Shimmer — Light, cheerful" },
+  { value: "verse",   label: "Verse — Versatile, natural" },
+];
+
+const TERMINAL_STATES = {
+  idle:               { label: "Ready",              color: "#6b7280" },
+  ringing:            { label: "Dialing",            color: "#3b82f6" },
+  connecting:         { label: "Connecting",         color: "#3b82f6" },
+  listening:          { label: "Listening",          color: "#10b981" },
+  processing:         { label: "Processing",         color: "#f59e0b" },
+  "wait-for-response":{ label: "Wait for Response",  color: "#f59e0b" },
+  "assistant-speaking":{ label: "Speaking",          color: "#8b5cf6" },
+  ending:             { label: "Ending",             color: "#f97316" },
+  completed:          { label: "Done",               color: "#10b981" },
+  failed:             { label: "Failed",             color: "#ef4444" },
+  timeout:            { label: "Timeout",            color: "#ef4444" },
+  connected:          { label: "Connected",          color: "#3b82f6" },
+};
+
 function createAudioUrlFromBase64(base64, mimeType) {
   const binary = atob(base64);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: mimeType || "audio/mpeg" });
   return URL.createObjectURL(blob);
 }
 
 function pickMimeType() {
   if (typeof window === "undefined" || typeof window.MediaRecorder === "undefined") return "";
-  const preferredTypes = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+  return preferred.find((t) => MediaRecorder.isTypeSupported(t)) || "";
 }
 
 function formatProfileValue(value) {
@@ -32,81 +56,48 @@ function formatDebugJson(value) {
 }
 
 function getPackageStatusLabel(customerProfile) {
-  const lookupStatus = customerProfile.package_lookup_status || "";
-
-  if (lookupStatus === "presented" || customerProfile.suggested_package) {
-    return "Package ready";
-  }
-  if (lookupStatus === "queued" || lookupStatus === "pending") {
-    return "Retrieving package";
-  }
-  if (lookupStatus === "failed" || lookupStatus === "api_unavailable") {
-    return "Package problem";
-  }
-
+  const s = customerProfile.package_lookup_status || "";
+  if (s === "presented" || customerProfile.suggested_package) return "Package ready";
+  if (s === "queued" || s === "pending") return "Retrieving package";
+  if (s === "failed" || s === "api_unavailable") return "Package problem";
   return "Not started";
 }
 
 function isTravelServiceCategory(category) {
-  return [
-    "Hotel Booking",
-    "Flight Booking",
-    "Sri Lanka Tour Planning",
-    "Transportation",
-    "Activities and Experiences",
-  ].includes(category);
+  return ["Hotel Booking", "Flight Booking", "Sri Lanka Tour Planning", "Transportation", "Activities and Experiences"].includes(category);
 }
 
 function inferListeningProfile(questionText) {
-  const normalized = String(questionText || "").toLowerCase();
-
-  if (normalized.includes("full name") || normalized.includes("your full name")) {
+  const n = String(questionText || "").toLowerCase();
+  if (n.includes("full name") || n.includes("your full name"))
     return { maxRecordMs: 10000, postSpeechSilenceMs: 2400, hint: "Mic ready. Say your full name clearly." };
-  }
-  if (normalized.includes("contact number") || normalized.includes("phone")) {
+  if (n.includes("contact number") || n.includes("phone"))
     return { maxRecordMs: 14000, postSpeechSilenceMs: 2800, hint: "Mic ready. Say the phone number clearly." };
-  }
-  if (normalized.includes("email")) {
-    return { maxRecordMs: 18000, postSpeechSilenceMs: 3000, hint: "Mic ready. Say the email slowly, letter by letter if needed." };
-  }
-  if (normalized.includes("country") || normalized.includes("location")) {
+  if (n.includes("email"))
+    return { maxRecordMs: 18000, postSpeechSilenceMs: 3000, hint: "Mic ready. Say the email slowly." };
+  if (n.includes("country") || n.includes("location"))
     return { maxRecordMs: 10000, postSpeechSilenceMs: 2400, hint: "Mic ready. Say your country or city." };
-  }
-  if (normalized.includes("booking id") || normalized.includes("reference number")) {
-    return { maxRecordMs: 14000, postSpeechSilenceMs: 2800, hint: "Mic ready. Say the booking ID clearly." };
-  }
-  if (
-    normalized.includes("package is okay") ||
-    normalized.includes("okay for you") ||
-    normalized.includes("is this package okay")
-  ) {
-    return { maxRecordMs: 12000, postSpeechSilenceMs: 2600, hint: "Mic ready. Say yes, or explain what to change." };
-  }
-  if (
-    normalized.includes("what needs to change") ||
-    normalized.includes("what need to change") ||
-    normalized.includes("special request") ||
-    normalized.includes("preferences")
-  ) {
+  if (n.includes("booking id") || n.includes("reference"))
+    return { maxRecordMs: 14000, postSpeechSilenceMs: 2800, hint: "Mic ready. Say the booking ID." };
+  if (n.includes("package is okay") || n.includes("okay for you"))
+    return { maxRecordMs: 12000, postSpeechSilenceMs: 2600, hint: "Mic ready. Say yes or explain what to change." };
+  if (n.includes("special request") || n.includes("preferences") || n.includes("what needs to change"))
     return { maxRecordMs: 22000, postSpeechSilenceMs: 3200, hint: "Mic ready. Take your time to explain." };
-  }
-  if (
-    normalized.includes("travel date") ||
-    normalized.includes("how many days") ||
-    normalized.includes("how many travelers") ||
-    normalized.includes("budget")
-  ) {
-    return { maxRecordMs: 14000, postSpeechSilenceMs: 2800, hint: "Mic ready. Please answer whenever you are ready." };
-  }
-  if (normalized.includes("help") || normalized.includes("assist") || normalized.includes("today")) {
-    return { maxRecordMs: 25000, postSpeechSilenceMs: 3500, hint: "Mic ready. Please tell us how we can help you." };
-  }
+  if (n.includes("travel date") || n.includes("how many days") || n.includes("travelers") || n.includes("budget"))
+    return { maxRecordMs: 14000, postSpeechSilenceMs: 2800, hint: "Mic ready. Please answer when ready." };
+  if (n.includes("help") || n.includes("assist") || n.includes("today"))
+    return { maxRecordMs: 25000, postSpeechSilenceMs: 3500, hint: "Mic ready. Please tell us how we can help." };
   return { maxRecordMs: 18000, postSpeechSilenceMs: 3000, hint: "Mic ready. Please go ahead." };
+}
+
+function msToDisplay(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export default function AahaasAssistentFinalV01() {
   const [callId, setCallId] = useState("");
-  const [callStatus, setCallStatus] = useState("Ready to start Aahaas Assistent Final (V0.1).");
+  const [callStatus, setCallStatus] = useState("Ready to start.");
   const [phase, setPhase] = useState("idle");
   const [error, setError] = useState("");
   const [conversation, setConversation] = useState([]);
@@ -116,10 +107,29 @@ export default function AahaasAssistentFinalV01() {
   const [serviceCategories, setServiceCategories] = useState([]);
   const [liveSummary, setLiveSummary] = useState("");
   const [finalReport, setFinalReport] = useState(null);
+  const [quotationStatus, setQuotationStatus] = useState(null); // null | { sent, api, email, error }
   const [testMessage, setTestMessage] = useState("");
   const [callEnded, setCallEnded] = useState(false);
   const [pulseLevel, setPulseLevel] = useState(0);
   const [listeningHint, setListeningHint] = useState("");
+
+  // Controls
+  const [selectedVoice, setSelectedVoice] = useState("coral");
+  const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [outputVolume, setOutputVolume] = useState(1.0);
+  const [musicLevel, setMusicLevel] = useState(0.18);
+  const [micSensitivity, setMicSensitivity] = useState(10);
+  const [bgMusicEnabled, setBgMusicEnabled] = useState(true);
+  const [micMuted, setMicMuted] = useState(false);
+
+  // Terminal status
+  const [terminalLog, setTerminalLog] = useState([]);
+  const [currentApiCall, setCurrentApiCall] = useState("");
+  const [apiCallStartTime, setApiCallStartTime] = useState(null);
+  const [apiResponseTime, setApiResponseTime] = useState(null);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const callDurationTimerRef = useRef(null);
 
   const mainAudioRef = useRef(null);
   const mainAudioUrlRef = useRef("");
@@ -144,6 +154,8 @@ export default function AahaasAssistentFinalV01() {
   const packagePrefetchStartedRef = useRef(false);
   const packageWaitPollRef = useRef(0);
   const ambientMusicRef = useRef(null);
+  const outputGainNodeRef = useRef(null);
+  const terminalEndRef = useRef(null);
 
   const callSupported =
     typeof window !== "undefined" &&
@@ -151,19 +163,15 @@ export default function AahaasAssistentFinalV01() {
     typeof navigator !== "undefined" &&
     !!navigator.mediaDevices?.getUserMedia;
 
-  useEffect(() => {
-    currentPhaseRef.current = phase;
-  }, [phase]);
+  useEffect(() => { currentPhaseRef.current = phase; }, [phase]);
 
   useEffect(() => {
     if (phase === "ringing" || phase === "connecting") {
-      initAmbientMusic();
-      setAmbientVolume(0.06, 2.5);
+      if (bgMusicEnabled) { initAmbientMusic(); setAmbientVolume(musicLevel * 0.4, 2.5); }
     } else if (phase === "processing") {
-      initAmbientMusic();
-      setAmbientVolume(0.32, 4.0);
+      if (bgMusicEnabled) { initAmbientMusic(); setAmbientVolume(musicLevel, 4.0); }
     } else if (phase === "assistant-speaking") {
-      setAmbientVolume(0.05, 1.2);
+      setAmbientVolume(bgMusicEnabled ? musicLevel * 0.25 : 0, 1.2);
     } else if (phase === "listening") {
       setAmbientVolume(0, 0.5);
     } else if (phase === "idle" || phase === "completed" || phase === "ending") {
@@ -172,20 +180,77 @@ export default function AahaasAssistentFinalV01() {
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (ambientMusicRef.current) {
+      setAmbientVolume(bgMusicEnabled ? musicLevel : 0, 0.6);
+    }
+  }, [bgMusicEnabled, musicLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (outputGainNodeRef.current) {
+      outputGainNodeRef.current.gain.value = outputVolume;
+    }
+    if (mainAudioRef.current) {
+      mainAudioRef.current.volume = outputVolume;
+    }
+  }, [outputVolume]);
+
+  useEffect(() => {
     return () => {
       autoLoopEnabledRef.current = false;
-      if (packageWaitPollRef.current) {
-        window.clearTimeout(packageWaitPollRef.current);
-        packageWaitPollRef.current = 0;
-      }
+      if (packageWaitPollRef.current) window.clearTimeout(packageWaitPollRef.current);
       stopAllAudio();
       stopMicrophone();
       stopSilenceMonitor();
-      if (mediaRecorderRef.current?.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
+      stopCallDurationTimer();
+      if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
     };
   }, []);
+
+  // Auto-scroll terminal log
+  useEffect(() => {
+    if (terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [terminalLog]);
+
+  function addTerminalEntry(type, message, detail = "") {
+    const ts = new Date().toISOString().slice(11, 23);
+    setTerminalLog((prev) => [...prev.slice(-80), { ts, type, message, detail }]);
+  }
+
+  function startCallDurationTimer() {
+    const t = Date.now();
+    setCallStartTime(t);
+    setCallDuration(0);
+    callDurationTimerRef.current = window.setInterval(() => {
+      setCallDuration(Date.now() - t);
+    }, 500);
+  }
+
+  function stopCallDurationTimer() {
+    if (callDurationTimerRef.current) {
+      window.clearInterval(callDurationTimerRef.current);
+      callDurationTimerRef.current = null;
+    }
+  }
+
+  function markApiStart(label) {
+    const t = Date.now();
+    setCurrentApiCall(label);
+    setApiCallStartTime(t);
+    setApiResponseTime(null);
+    addTerminalEntry("api-start", `→ ${label}`, "");
+  }
+
+  function markApiEnd(label, success, responseMs, detail = "") {
+    setApiResponseTime(responseMs);
+    setCurrentApiCall("");
+    addTerminalEntry(
+      success ? "api-ok" : "api-err",
+      `${success ? "✓" : "✗"} ${label} — ${msToDisplay(responseMs)}`,
+      detail
+    );
+  }
 
   function getAudioContext() {
     if (typeof window === "undefined") return null;
@@ -196,62 +261,62 @@ export default function AahaasAssistentFinalV01() {
   }
 
   function playToneSequence(steps) {
-    const context = getAudioContext();
-    if (!context) return;
-    if (context.state === "suspended") context.resume().catch(() => {});
-    const startAt = context.currentTime + 0.02;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const startAt = ctx.currentTime + 0.02;
     steps.reduce((cursor, step) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = step.type || "sine";
-      oscillator.frequency.value = step.frequency;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = step.type || "sine";
+      osc.frequency.value = step.frequency;
       gain.gain.setValueAtTime(0.0001, cursor);
-      gain.gain.exponentialRampToValueAtTime(step.gain || 0.04, cursor + 0.01);
+      gain.gain.exponentialRampToValueAtTime((step.gain || 0.04) * outputVolume, cursor + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.0001, cursor + step.duration);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(cursor);
-      oscillator.stop(cursor + step.duration + 0.02);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(cursor);
+      osc.stop(cursor + step.duration + 0.02);
       return cursor + step.duration + (step.gap || 0.04);
     }, startAt);
   }
 
   function playRingTone() {
     playToneSequence([
-      { frequency: 440, duration: 0.35, gap: 0.09, type: "triangle", gain: 0.05 },
+      { frequency: 440,    duration: 0.35, gap: 0.09, type: "triangle", gain: 0.05 },
       { frequency: 554.37, duration: 0.35, gap: 0.18, type: "triangle", gain: 0.04 },
-      { frequency: 440, duration: 0.35, gap: 0.09, type: "triangle", gain: 0.05 },
-      { frequency: 659.25, duration: 0.38, type: "triangle", gain: 0.04 },
+      { frequency: 440,    duration: 0.35, gap: 0.09, type: "triangle", gain: 0.05 },
+      { frequency: 659.25, duration: 0.38,             type: "triangle", gain: 0.04 },
     ]);
   }
 
   function playConnectTone() {
     playToneSequence([
-      { frequency: 392, duration: 0.15, gap: 0.03, type: "sine" },
+      { frequency: 392,    duration: 0.15, gap: 0.03, type: "sine" },
       { frequency: 523.25, duration: 0.15, gap: 0.03, type: "sine" },
-      { frequency: 659.25, duration: 0.22, type: "sine" },
+      { frequency: 659.25, duration: 0.22,             type: "sine" },
     ]);
   }
 
   function playHangupTone() {
     playToneSequence([
       { frequency: 587.33, duration: 0.14, gap: 0.03, type: "triangle" },
-      { frequency: 440, duration: 0.14, gap: 0.03, type: "triangle" },
-      { frequency: 293.66, duration: 0.22, type: "triangle" },
+      { frequency: 440,    duration: 0.14, gap: 0.03, type: "triangle" },
+      { frequency: 293.66, duration: 0.22,             type: "triangle" },
     ]);
   }
 
   function playListeningStartTone() {
     playToneSequence([
       { frequency: 783.99, duration: 0.1, gap: 0.03, type: "sine", gain: 0.03 },
-      { frequency: 1046.5, duration: 0.12, type: "sine", gain: 0.028 },
+      { frequency: 1046.5, duration: 0.12,             type: "sine", gain: 0.028 },
     ]);
   }
 
   function playListeningStopTone() {
     playToneSequence([
       { frequency: 659.25, duration: 0.1, gap: 0.03, type: "triangle", gain: 0.026 },
-      { frequency: 523.25, duration: 0.12, type: "triangle", gain: 0.024 },
+      { frequency: 523.25, duration: 0.12,             type: "triangle", gain: 0.024 },
     ]);
   }
 
@@ -259,18 +324,16 @@ export default function AahaasAssistentFinalV01() {
     playToneSequence([
       { frequency: 293.66, duration: 0.28, gap: 0.06, type: "triangle", gain: 0.012 },
       { frequency: 369.99, duration: 0.28, gap: 0.06, type: "triangle", gain: 0.011 },
-      { frequency: 440, duration: 0.36, gap: 0.08, type: "triangle", gain: 0.011 },
-      { frequency: 369.99, duration: 0.28, gap: 0.06, type: "triangle", gain: 0.01 },
-      { frequency: 329.63, duration: 0.42, gap: 0.1, type: "triangle", gain: 0.01 },
+      { frequency: 440,    duration: 0.36, gap: 0.08, type: "triangle", gain: 0.011 },
+      { frequency: 369.99, duration: 0.28, gap: 0.06, type: "triangle", gain: 0.010 },
+      { frequency: 329.63, duration: 0.42, gap: 0.10, type: "triangle", gain: 0.010 },
     ]);
   }
 
   function startHoldMusicLoop() {
     stopHoldMusicLoop();
     playHoldMusicPhrase();
-    holdMusicTimerRef.current = window.setInterval(() => {
-      playHoldMusicPhrase();
-    }, 2500);
+    holdMusicTimerRef.current = window.setInterval(() => playHoldMusicPhrase(), 2500);
   }
 
   function stopHoldMusicLoop() {
@@ -282,70 +345,61 @@ export default function AahaasAssistentFinalV01() {
 
   function initAmbientMusic() {
     if (ambientMusicRef.current) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    const context = getAudioContext();
-    if (!context) return;
-    if (context.state === "suspended") context.resume().catch(() => {});
-
-    const audio = new Audio("/ambient-music.mp3");
+    const audio = new Audio(`${API_BASE_URL}/aahaas-assistent-v01/ambient-music`);
     audio.loop = true;
+    audio.crossOrigin = "anonymous";
 
-    const gainNode = context.createGain();
+    const gainNode = ctx.createGain();
     gainNode.gain.value = 0.001;
 
-    const source = context.createMediaElementSource(audio);
-    source.connect(gainNode);
-    gainNode.connect(context.destination);
+    try {
+      const source = ctx.createMediaElementSource(audio);
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      ambientMusicRef.current = { audio, gainNode, source };
+    } catch {
+      ambientMusicRef.current = { audio, gainNode, source: null };
+    }
 
-    ambientMusicRef.current = { audio, gainNode, source };
     audio.play().catch(() => {});
   }
 
   function setAmbientVolume(target, fadeSec) {
     if (!ambientMusicRef.current) return;
-    const context = audioContextRef.current;
-    if (!context) return;
-
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
     const { gainNode } = ambientMusicRef.current;
-    const now = context.currentTime;
-    const current = gainNode.gain.value;
-
+    const now = ctx.currentTime;
     gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(Math.max(current, 0.001), now);
-
+    gainNode.gain.setValueAtTime(Math.max(gainNode.gain.value, 0.001), now);
     if (target <= 0) {
       gainNode.gain.exponentialRampToValueAtTime(0.001, now + fadeSec);
     } else {
-      gainNode.gain.exponentialRampToValueAtTime(target, now + fadeSec);
+      gainNode.gain.exponentialRampToValueAtTime(Math.max(target, 0.001), now + fadeSec);
     }
   }
 
   function destroyAmbientMusic() {
     if (!ambientMusicRef.current) return;
     const { audio, gainNode } = ambientMusicRef.current;
-    const context = audioContextRef.current;
-
-    if (context && gainNode) {
-      const now = context.currentTime;
+    const ctx = audioContextRef.current;
+    if (ctx && gainNode) {
+      const now = ctx.currentTime;
       try {
         gainNode.gain.cancelScheduledValues(now);
         gainNode.gain.setValueAtTime(Math.max(gainNode.gain.value, 0.001), now);
         gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
       } catch {}
-      window.setTimeout(() => {
-        audio.pause();
-        audio.src = "";
-      }, 2100);
+      window.setTimeout(() => { audio.pause(); audio.src = ""; }, 2100);
     } else {
       audio.pause();
       audio.src = "";
     }
-
     ambientMusicRef.current = null;
-  }
-
-  function stopAmbientMusic() {
-    destroyAmbientMusic();
   }
 
   function stopAllAudio() {
@@ -354,35 +408,28 @@ export default function AahaasAssistentFinalV01() {
       mainAudioRef.current.currentTime = 0;
       mainAudioRef.current = null;
     }
-    if (mainAudioUrlRef.current) {
-      URL.revokeObjectURL(mainAudioUrlRef.current);
-      mainAudioUrlRef.current = "";
-    }
+    if (mainAudioUrlRef.current) { URL.revokeObjectURL(mainAudioUrlRef.current); mainAudioUrlRef.current = ""; }
     if (holdAudioRef.current) {
       holdAudioRef.current.pause();
       holdAudioRef.current.currentTime = 0;
       holdAudioRef.current = null;
     }
-    if (holdAudioUrlRef.current) {
-      URL.revokeObjectURL(holdAudioUrlRef.current);
-      holdAudioUrlRef.current = "";
-    }
+    if (holdAudioUrlRef.current) { URL.revokeObjectURL(holdAudioUrlRef.current); holdAudioUrlRef.current = ""; }
     stopHoldMusicLoop();
-    stopAmbientMusic();
+    destroyAmbientMusic();
   }
 
   async function playAgentAudio(audioUrl, onEnded) {
     if (mainAudioRef.current) mainAudioRef.current.pause();
     const audio = new Audio(audioUrl);
+    audio.volume = outputVolume;
     mainAudioRef.current = audio;
     mainAudioUrlRef.current = audioUrl;
     setPhase("assistant-speaking");
+    addTerminalEntry("state", "Speaking (AI response audio)");
 
     audio.onended = () => {
-      if (mainAudioUrlRef.current) {
-        URL.revokeObjectURL(mainAudioUrlRef.current);
-        mainAudioUrlRef.current = "";
-      }
+      if (mainAudioUrlRef.current) { URL.revokeObjectURL(mainAudioUrlRef.current); mainAudioUrlRef.current = ""; }
       if (mainAudioRef.current === audio) mainAudioRef.current = null;
       onEnded?.();
     };
@@ -391,18 +438,13 @@ export default function AahaasAssistentFinalV01() {
   }
 
   async function playHoldAudioLoop() {
-    if (!holdAudioUrlRef.current) {
-      startHoldMusicLoop();
-      return;
-    }
+    if (!holdAudioUrlRef.current) { startHoldMusicLoop(); return; }
     if (holdAudioRef.current) holdAudioRef.current.pause();
     const audio = new Audio(holdAudioUrlRef.current);
-    audio.volume = 0.8;
+    audio.volume = musicLevel;
     holdAudioRef.current = audio;
     startHoldMusicLoop();
-    await audio.play().catch(() => {
-      holdAudioRef.current = null;
-    });
+    await audio.play().catch(() => { holdAudioRef.current = null; });
   }
 
   function stopHoldAudioLoop() {
@@ -418,17 +460,15 @@ export default function AahaasAssistentFinalV01() {
     autoLoopEnabledRef.current = false;
     finalizingRef.current = false;
     packagePrefetchStartedRef.current = false;
-    if (packageWaitPollRef.current) {
-      window.clearTimeout(packageWaitPollRef.current);
-      packageWaitPollRef.current = 0;
-    }
+    if (packageWaitPollRef.current) { window.clearTimeout(packageWaitPollRef.current); packageWaitPollRef.current = 0; }
     stopAllAudio();
     stopMicrophone();
     stopSilenceMonitor();
+    stopCallDurationTimer();
     callIdRef.current = "";
     lastReplyRef.current = "";
     setCallId("");
-    setCallStatus("Ready to start Aahaas Assistent Final (V0.1).");
+    setCallStatus("Ready to start.");
     setPhase("idle");
     setError("");
     setConversation([]);
@@ -442,6 +482,13 @@ export default function AahaasAssistentFinalV01() {
     setCallEnded(false);
     setPulseLevel(0);
     setListeningHint("");
+    setQuotationStatus(null);
+    setCurrentApiCall("");
+    setApiCallStartTime(null);
+    setApiResponseTime(null);
+    setCallStartTime(null);
+    setCallDuration(0);
+    setTerminalLog([]);
   }
 
   async function handleStartCall() {
@@ -453,21 +500,30 @@ export default function AahaasAssistentFinalV01() {
       setCallEnded(false);
       setPhase("ringing");
       setCallStatus("Calling Aahaas. Please wait while we connect the assistant.");
+      addTerminalEntry("state", "Dialing — initiating session");
       playRingTone();
+      startCallDurationTimer();
 
       await new Promise((resolve) => window.setTimeout(resolve, 1600));
       setPhase("connecting");
-      setCallStatus("Connecting you to the Aahaas Assistent Final (V0.1) receptionist now...");
+      setCallStatus("Connecting to Aahaas Assistent V0.1...");
+      addTerminalEntry("state", "Connecting...");
       playConnectTone();
 
-      const response = await fetch(`${API_BASE_URL}/ai-assistent-final-test/session`, {
+      const t0 = Date.now();
+      markApiStart("POST /aahaas-assistent-v01/session");
+
+      const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ voice_name: selectedVoice, voice_speed: voiceSpeed }),
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Aahaas Assistent Final (V0.1) session could not start.");
+      const elapsed = Date.now() - t0;
+      markApiEnd("POST /aahaas-assistent-v01/session", response.ok, elapsed, data.message || "");
+
+      if (!response.ok) throw new Error(data.message || "Session could not start.");
 
       callIdRef.current = data.call_id || "";
       lastReplyRef.current = data.greeting || "";
@@ -475,6 +531,7 @@ export default function AahaasAssistentFinalV01() {
       setLastReply(data.greeting || "");
       setConversation(data.greeting ? [{ role: "assistant", content: data.greeting }] : []);
       setCallStatus("Connected. The AI assistant is greeting you.");
+      addTerminalEntry("info", `Session started — ID: ${data.call_id}`, `Voice: ${selectedVoice}, Speed: ${voiceSpeed}x`);
 
       if (data.hold_audio_base64) {
         holdAudioUrlRef.current = createAudioUrlFromBase64(data.hold_audio_base64, data.hold_audio_mime_type);
@@ -489,6 +546,8 @@ export default function AahaasAssistentFinalV01() {
       setPhase("idle");
       setError(err.message);
       setCallStatus("The call could not be started.");
+      addTerminalEntry("error", `Failed: ${err.message}`);
+      stopCallDurationTimer();
     }
   }
 
@@ -500,26 +559,23 @@ export default function AahaasAssistentFinalV01() {
       setPhase("listening");
       setCallStatus("Listening for your answer now.");
       setListeningHint(profile.hint);
+      addTerminalEntry("state", "Listening — mic active");
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
       recordedChunksRef.current = [];
       mediaRecorderRef.current = recorder;
       mediaStreamRef.current = stream;
 
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) recordedChunksRef.current.push(event.data);
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) recordedChunksRef.current.push(ev.data);
       };
 
       recorder.onstop = async () => {
         playListeningStopTone();
-        const audioBlob = new Blob(recordedChunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
-        });
+        const audioBlob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "audio/webm" });
         recordedChunksRef.current = [];
         stopMicrophone();
         if (audioBlob.size === 0 || !autoLoopEnabledRef.current) return;
@@ -528,17 +584,21 @@ export default function AahaasAssistentFinalV01() {
           await sendSilenceNudge();
           return;
         }
-
         await sendTurn(audioBlob);
       };
+
+      if (micMuted) {
+        stream.getAudioTracks().forEach((t) => { t.enabled = false; });
+      }
 
       recorder.start(250);
       playListeningStartTone();
       startSilenceMonitor(stream, recorder, profile);
     } catch (err) {
       setError(err.message || "Microphone access failed.");
-      setCallStatus("Microphone access is required for the continuous call.");
+      setCallStatus("Microphone access is required for the call.");
       setPhase("idle");
+      addTerminalEntry("error", `Mic error: ${err.message}`);
     }
   }
 
@@ -546,18 +606,18 @@ export default function AahaasAssistentFinalV01() {
     stopSilenceMonitor();
     captureElapsedMsRef.current = 0;
 
-    const context = getAudioContext();
-    if (!context) {
+    const ctx = getAudioContext();
+    if (!ctx) {
       window.setTimeout(() => {
         if (recorder.state === "recording") recorder.stop();
       }, profile.maxRecordMs);
       return;
     }
 
-    const analyser = context.createAnalyser();
+    const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.85;
-    const source = context.createMediaStreamSource(stream);
+    const source = ctx.createMediaStreamSource(stream);
     source.connect(analyser);
     analyserRef.current = analyser;
     sourceNodeRef.current = source;
@@ -565,15 +625,16 @@ export default function AahaasAssistentFinalV01() {
     silenceMsRef.current = 0;
 
     const samples = new Uint8Array(analyser.frequencyBinCount);
+    const silenceThreshold = micSensitivity;
 
     const tick = () => {
       if (!analyserRef.current || recorder.state !== "recording") return;
       analyserRef.current.getByteFrequencyData(samples);
-      const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
-      setPulseLevel(Math.min(1, average / 80));
+      const avg = samples.reduce((s, v) => s + v, 0) / samples.length;
+      setPulseLevel(Math.min(1, avg / 80));
       captureElapsedMsRef.current += 120;
 
-      if (average > 10) {
+      if (avg > silenceThreshold) {
         speakingDetectedRef.current = true;
         silenceMsRef.current = 0;
       } else if (speakingDetectedRef.current) {
@@ -582,14 +643,8 @@ export default function AahaasAssistentFinalV01() {
         silenceMsRef.current += 120;
       }
 
-      if (captureElapsedMsRef.current >= profile.maxRecordMs) {
-        recorder.stop();
-        return;
-      }
-      if (speakingDetectedRef.current && silenceMsRef.current >= profile.postSpeechSilenceMs) {
-        recorder.stop();
-        return;
-      }
+      if (captureElapsedMsRef.current >= profile.maxRecordMs) { recorder.stop(); return; }
+      if (speakingDetectedRef.current && silenceMsRef.current >= profile.postSpeechSilenceMs) { recorder.stop(); return; }
 
       silenceMonitorRef.current = window.setTimeout(tick, 120);
     };
@@ -598,25 +653,16 @@ export default function AahaasAssistentFinalV01() {
   }
 
   function stopSilenceMonitor() {
-    if (silenceMonitorRef.current) {
-      window.clearTimeout(silenceMonitorRef.current);
-      silenceMonitorRef.current = 0;
-    }
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current = null;
-    }
-    if (analyserRef.current) {
-      analyserRef.current.disconnect();
-      analyserRef.current = null;
-    }
+    if (silenceMonitorRef.current) { window.clearTimeout(silenceMonitorRef.current); silenceMonitorRef.current = 0; }
+    if (sourceNodeRef.current) { sourceNodeRef.current.disconnect(); sourceNodeRef.current = null; }
+    if (analyserRef.current) { analyserRef.current.disconnect(); analyserRef.current = null; }
     setPulseLevel(0);
     setListeningHint("");
   }
 
   function stopMicrophone() {
     stopSilenceMonitor();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
   }
 
@@ -625,17 +671,20 @@ export default function AahaasAssistentFinalV01() {
     try {
       setPhase("processing");
       setCallStatus("Checking if you are still there...");
+      addTerminalEntry("state", "Silence detected — sending nudge");
+
+      const t0 = Date.now();
+      markApiStart("POST /aahaas-assistent-v01/turn (silence)");
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
       formData.append("transcript", "__silent__");
+      formData.append("voice_name", selectedVoice);
+      formData.append("voice_speed", String(voiceSpeed));
 
-      const response = await fetch(`${API_BASE_URL}/ai-assistent-final-test/turn`, {
-        method: "POST",
-        body: formData,
-      });
-
+      const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/turn`, { method: "POST", body: formData });
       const data = await response.json().catch(() => ({}));
+      markApiEnd("POST /aahaas-assistent-v01/turn (silence)", response.ok, Date.now() - t0);
 
       if (!response.ok || !data.audio_base64) {
         if (autoLoopEnabledRef.current) await beginListening();
@@ -653,11 +702,9 @@ export default function AahaasAssistentFinalV01() {
 
   async function startPackagePrefetch() {
     if (!callIdRef.current || packagePrefetchStartedRef.current) return;
-
     packagePrefetchStartedRef.current = true;
-
     try {
-      await fetch(`${API_BASE_URL}/ai-assistent-final-test/package-prefetch`, {
+      await fetch(`${API_BASE_URL}/aahaas-assistent-v01/package-prefetch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current }),
@@ -673,20 +720,23 @@ export default function AahaasAssistentFinalV01() {
     try {
       setPhase("processing");
       setCallStatus("Waiting for Aahaas product options. Please hold for a moment.");
+      addTerminalEntry("state", "Waiting for package results");
       await playHoldAudioLoop();
 
       const poll = async () => {
-        const response = await fetch(`${API_BASE_URL}/ai-assistent-final-test/package-status`, {
+        const t0 = Date.now();
+        markApiStart("POST /aahaas-assistent-v01/package-status");
+
+        const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/package-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ call_id: callIdRef.current }),
+          body: JSON.stringify({ call_id: callIdRef.current, voice_name: selectedVoice, voice_speed: voiceSpeed }),
         });
 
         const data = await response.json().catch(() => ({}));
+        markApiEnd("POST /aahaas-assistent-v01/package-status", response.ok, Date.now() - t0);
 
-        if (!response.ok) {
-          throw new Error(data.message || "Could not check package status.");
-        }
+        if (!response.ok) throw new Error(data.message || "Could not check package status.");
 
         if (!data.ready && !data.failed) {
           packageWaitPollRef.current = window.setTimeout(() => {
@@ -699,10 +749,7 @@ export default function AahaasAssistentFinalV01() {
           return;
         }
 
-        if (packageWaitPollRef.current) {
-          window.clearTimeout(packageWaitPollRef.current);
-          packageWaitPollRef.current = 0;
-        }
+        if (packageWaitPollRef.current) { window.clearTimeout(packageWaitPollRef.current); packageWaitPollRef.current = 0; }
 
         stopHoldAudioLoop();
         setConversation(data.conversation || []);
@@ -714,24 +761,19 @@ export default function AahaasAssistentFinalV01() {
         const replyUrl = createAudioUrlFromBase64(data.audio_base64, data.audio_mime_type);
         await playAgentAudio(replyUrl, async () => {
           if (data.failed) {
-            setCallStatus("Package search had a problem. The assistant is continuing the conversation.");
-            if (autoLoopEnabledRef.current) {
-              await beginListening();
-            }
+            setCallStatus("Package search had a problem. The assistant is continuing.");
+            if (autoLoopEnabledRef.current) await beginListening();
             return;
           }
-
           if (data.should_end) {
             autoLoopEnabledRef.current = false;
             setCallEnded(true);
             setCallStatus("The call has ended.");
             setPhase("completed");
+            addTerminalEntry("state", "Call completed (package flow)");
             return;
           }
-
-          if (autoLoopEnabledRef.current) {
-            await beginListening();
-          }
+          if (autoLoopEnabledRef.current) await beginListening();
         });
       };
 
@@ -739,7 +781,7 @@ export default function AahaasAssistentFinalV01() {
     } catch (err) {
       stopHoldAudioLoop();
       setError(err.message);
-      setCallStatus("We could not finish checking the Aahaas package yet.");
+      setCallStatus("We could not finish checking the package yet.");
       if (autoLoopEnabledRef.current) await beginListening();
     }
   }
@@ -747,20 +789,25 @@ export default function AahaasAssistentFinalV01() {
   async function sendTurn(audioBlob, transcriptText = "") {
     try {
       setPhase("processing");
-      setCallStatus("Aahaas is reviewing the request and preparing the next question.");
+      setCallStatus("Aahaas is reviewing your request and preparing the next question.");
+      addTerminalEntry("state", "Processing — sending turn to API");
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
-      if (audioBlob) formData.append("audio", audioBlob, "aahaas-assistent-final-v01.webm");
+      if (audioBlob) formData.append("audio", audioBlob, "aahaas-v01.webm");
       if (transcriptText.trim()) formData.append("transcript", transcriptText.trim());
+      formData.append("voice_name", selectedVoice);
+      formData.append("voice_speed", String(voiceSpeed));
 
-      const response = await fetch(`${API_BASE_URL}/ai-assistent-final-test/turn`, {
-        method: "POST",
-        body: formData,
-      });
+      const t0 = Date.now();
+      markApiStart("POST /aahaas-assistent-v01/turn");
 
+      const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/turn`, { method: "POST", body: formData });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Aahaas Assistent Final (V0.1) reply failed.");
+      const elapsed = Date.now() - t0;
+      markApiEnd("POST /aahaas-assistent-v01/turn", response.ok, elapsed, data.reply?.slice(0, 80) || data.message || "");
+
+      if (!response.ok) throw new Error(data.message || "Turn reply failed.");
 
       setLastTranscript(data.transcript || "");
       lastReplyRef.current = data.reply || "";
@@ -771,10 +818,7 @@ export default function AahaasAssistentFinalV01() {
       setServiceCategories(data.service_categories || []);
       setLiveSummary(data.live_summary || "");
 
-      if (
-        data.package_lookup_status === "queued" &&
-        (data.service_categories || []).some(isTravelServiceCategory)
-      ) {
+      if (data.package_lookup_status === "queued" && (data.service_categories || []).some(isTravelServiceCategory)) {
         startPackagePrefetch();
       }
 
@@ -793,8 +837,9 @@ export default function AahaasAssistentFinalV01() {
     } catch (err) {
       stopHoldAudioLoop();
       setError(err.message);
-      setCallStatus("There was a temporary issue, but the call is still open. Please continue when you are ready.");
+      setCallStatus("Temporary issue — call is still open. Please continue when ready.");
       setPhase("connected");
+      addTerminalEntry("error", `Turn error: ${err.message}`);
     }
   }
 
@@ -813,14 +858,20 @@ export default function AahaasAssistentFinalV01() {
       stopMicrophone();
       setPhase("ending");
       setCallStatus("Finalizing your call report and closing the conversation...");
+      addTerminalEntry("state", "Ending call — generating report");
 
-      const response = await fetch(`${API_BASE_URL}/ai-assistent-final-test/end`, {
+      const t0 = Date.now();
+      markApiStart("POST /aahaas-assistent-v01/end");
+
+      const response = await fetch(`${API_BASE_URL}/aahaas-assistent-v01/end`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ call_id: callIdRef.current, ended_reason: endedReason }),
+        body: JSON.stringify({ call_id: callIdRef.current, ended_reason: endedReason, voice_name: selectedVoice, voice_speed: voiceSpeed }),
       });
 
       const data = await response.json().catch(() => ({}));
+      markApiEnd("POST /aahaas-assistent-v01/end", response.ok, Date.now() - t0);
+
       if (!response.ok) throw new Error(data.message || "Call report could not be created.");
 
       setFinalReport(data.report || null);
@@ -829,34 +880,44 @@ export default function AahaasAssistentFinalV01() {
       setCallEnded(true);
       setCallStatus("The call has ended and the report was created successfully.");
       playHangupTone();
+      stopCallDurationTimer();
+
+      const qSent = data.quotation_sent;
+      setQuotationStatus({
+        sent:  qSent,
+        api:   data.quotation_api,
+        email: data.quotation_email,
+        waId:  data.quotation_wa_id || "",
+        error: data.quotation_error || null,
+      });
+      addTerminalEntry(
+        qSent ? "info" : "api-err",
+        qSent
+          ? `Quotation sent — API: ${data.quotation_api ? "✓" : "✗"}  Email: ${data.quotation_email ? "✓" : "✗"}`
+          : `Quotation NOT sent${data.quotation_error ? ` — ${data.quotation_error}` : " (contacts missing?)"}`,
+      );
+      addTerminalEntry("info", "Call ended — report ready");
 
       const closingUrl = createAudioUrlFromBase64(data.audio_base64, data.audio_mime_type);
-      await playAgentAudio(closingUrl, () => {
-        setPhase("completed");
-      });
+      await playAgentAudio(closingUrl, () => { setPhase("completed"); });
     } catch (err) {
       setError(err.message);
       setCallStatus("The live call ended, but the final report could not be saved yet.");
       setPhase("completed");
+      stopCallDurationTimer();
+      addTerminalEntry("error", `Finalize error: ${err.message}`);
     } finally {
       finalizingRef.current = false;
     }
   }
 
   async function handleHangUp() {
-    if (!callId) {
-      resetState();
-      return;
-    }
+    if (!callId) { resetState(); return; }
 
     const activeTravelCall = serviceCategories.some(isTravelServiceCategory);
     const packageState = customerProfile.package_state || "";
 
-    if (
-      activeTravelCall &&
-      !["accepted", "api_unavailable"].includes(packageState) &&
-      !finalizingRef.current
-    ) {
+    if (activeTravelCall && !["accepted", "api_unavailable"].includes(packageState) && !finalizingRef.current) {
       await sendTurn(null, "I would like to end the call now. Please confirm the recommended package first.");
       return;
     }
@@ -864,11 +925,23 @@ export default function AahaasAssistentFinalV01() {
     await finalizeCall("manual_hangup");
   }
 
+  function handleToggleMicMute() {
+    setMicMuted((prev) => {
+      const next = !prev;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getAudioTracks().forEach((t) => { t.enabled = !next; });
+      }
+      addTerminalEntry("info", next ? "Mic muted" : "Mic unmuted");
+      return next;
+    });
+  }
+
+  const terminalState = TERMINAL_STATES[phase] || TERMINAL_STATES.idle;
   const profileFields = [
-    ["Full name", customerProfile.full_name],
-    ["Contact number", customerProfile.contact_number],
-    ["Email", customerProfile.email_address],
-    ["Country", customerProfile.current_living_country],
+    ["Full name",       customerProfile.full_name],
+    ["Contact number",  customerProfile.contact_number],
+    ["Email",           customerProfile.email_address],
+    ["Country",         customerProfile.current_living_country],
   ];
   const packageStatusLabel = getPackageStatusLabel(customerProfile);
   const packageIssue = customerProfile.package_lookup_error || "";
@@ -876,20 +949,159 @@ export default function AahaasAssistentFinalV01() {
   return (
     <div className="panel reception-panel">
       <div className="reception-backdrop" />
+
+      {/* Header */}
       <div className="panel-header reception-header">
         <div>
-          <p className="eyebrow">ElevenLabs Voice</p>
+          <p className="eyebrow">OpenAI Voice</p>
           <h2>Aahaas Assistent Final (V0.1)</h2>
           <p className="panel-copy reception-copy">
-            This is the new Aahaas home page call flow. It uses ElevenLabs for voice,
-            uses ChatGPT only for reasoning and follow-up questions, listens
-            automatically, and asks intake questions in a more natural way based on
-            your sample conversation.
+            OpenAI TTS voice — no ElevenLabs latency. Asks "How can I help?", fetches the best package, presents a full summary with defaults (2 PAX · 3-star · 3 nights · next week), confirms changes, then collects name + contact + email to close the booking.
           </p>
         </div>
-        <span className="call-badge reception-badge">Home page flow</span>
+        <span className="call-badge reception-badge">V0.1 — OpenAI Voice</span>
       </div>
 
+      {/* Controls Panel */}
+      <div style={{
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12,
+        padding: "16px 20px",
+        marginBottom: 20,
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+        gap: "14px 20px",
+      }}>
+        {/* Voice Agent */}
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Voice Agent
+          </span>
+          <select
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            disabled={phase !== "idle"}
+            style={{
+              background: "#1f2937",
+              color: "#f3f4f6",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 7,
+              padding: "6px 10px",
+              fontSize: 13,
+              cursor: phase !== "idle" ? "not-allowed" : "pointer",
+            }}
+          >
+            {OPENAI_VOICES.map((v) => (
+              <option key={v.value} value={v.value}>{v.label}</option>
+            ))}
+          </select>
+        </label>
+
+        {/* Voice Speed */}
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Voice Speed — {voiceSpeed.toFixed(1)}×
+          </span>
+          <input
+            type="range" min="0.5" max="2.0" step="0.1"
+            value={voiceSpeed}
+            onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+            style={{ accentColor: "#8b5cf6", width: "100%" }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#6b7280" }}>
+            <span>0.5×</span><span>1.0×</span><span>2.0×</span>
+          </div>
+        </label>
+
+        {/* Output Volume */}
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Output Volume — {Math.round(outputVolume * 100)}%
+          </span>
+          <input
+            type="range" min="0" max="1" step="0.05"
+            value={outputVolume}
+            onChange={(e) => setOutputVolume(parseFloat(e.target.value))}
+            style={{ accentColor: "#3b82f6", width: "100%" }}
+          />
+        </label>
+
+        {/* Mic Sensitivity */}
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Mic Sensitivity — {micSensitivity === 1 ? "Max" : micSensitivity === 50 ? "Min" : micSensitivity}
+          </span>
+          <input
+            type="range" min="1" max="50" step="1"
+            value={micSensitivity}
+            onChange={(e) => setMicSensitivity(parseInt(e.target.value))}
+            style={{ accentColor: "#10b981", width: "100%" }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#6b7280" }}>
+            <span>High</span><span>Mid</span><span>Low</span>
+          </div>
+        </label>
+
+        {/* Music Level */}
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Music Level — {Math.round(musicLevel * 100)}%
+          </span>
+          <input
+            type="range" min="0" max="1" step="0.05"
+            value={musicLevel}
+            onChange={(e) => setMusicLevel(parseFloat(e.target.value))}
+            style={{ accentColor: "#f59e0b", width: "100%" }}
+          />
+        </label>
+
+        {/* Background Music Toggle + Mic Toggle */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setBgMusicEnabled((p) => !p)}
+            style={{
+              background: bgMusicEnabled ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${bgMusicEnabled ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.1)"}`,
+              color: bgMusicEnabled ? "#f59e0b" : "#9ca3af",
+              borderRadius: 8,
+              padding: "8px 14px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 16 }}>{bgMusicEnabled ? "♪" : "♪"}</span>
+            Background Music: {bgMusicEnabled ? "ON" : "OFF"}
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleMicMute}
+            style={{
+              background: micMuted ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)",
+              border: `1px solid ${micMuted ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.5)"}`,
+              color: micMuted ? "#ef4444" : "#10b981",
+              borderRadius: 8,
+              padding: "8px 14px",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 16 }}>{micMuted ? "🔇" : "🎤"}</span>
+            Mic: {micMuted ? "MUTED" : "ACTIVE"}
+          </button>
+        </div>
+      </div>
+
+      {/* Call Stage */}
       <div className="reception-stage">
         <div className={`call-orb phase-${phase}`}>
           <div className="call-orb-core" style={{ transform: `scale(${1 + pulseLevel * 0.3})` }} />
@@ -905,6 +1117,7 @@ export default function AahaasAssistentFinalV01() {
         </div>
       </div>
 
+      {/* Call Controls */}
       <div className="reception-controls">
         <button
           type="button"
@@ -928,20 +1141,106 @@ export default function AahaasAssistentFinalV01() {
       </div>
 
       {!callSupported ? (
-        <p className="error-text">
-          This browser does not support microphone recording for Aahaas Assistent Final (V0.1).
-        </p>
+        <p className="error-text">This browser does not support microphone recording.</p>
       ) : null}
       {error ? <p className="error-text">{error}</p> : null}
 
+      {/* Terminal Status Panel */}
+      <div style={{
+        background: "#0d1117",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 12,
+        padding: "14px 16px",
+        marginBottom: 20,
+        fontFamily: "'Courier New', Courier, monospace",
+      }}>
+        {/* Status bar */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+          marginBottom: 10,
+          paddingBottom: 10,
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <div style={{
+              width: 10, height: 10, borderRadius: "50%",
+              background: terminalState.color,
+              boxShadow: `0 0 6px ${terminalState.color}`,
+              flexShrink: 0,
+            }} />
+            <span style={{ color: terminalState.color, fontWeight: 700, fontSize: 13 }}>
+              {terminalState.label}
+            </span>
+          </div>
+          {callId ? (
+            <span style={{ color: "#6b7280", fontSize: 11 }}>ID: {callId}</span>
+          ) : null}
+          {callDuration > 0 ? (
+            <span style={{ color: "#9ca3af", fontSize: 11 }}>
+              Call: {msToDisplay(callDuration)}
+            </span>
+          ) : null}
+          {currentApiCall ? (
+            <span style={{ color: "#f59e0b", fontSize: 11 }}>
+              ⏳ {currentApiCall}
+            </span>
+          ) : null}
+          {apiResponseTime !== null ? (
+            <span style={{ color: "#10b981", fontSize: 11 }}>
+              Last response: {msToDisplay(apiResponseTime)}
+            </span>
+          ) : null}
+          <span style={{ marginLeft: "auto", color: "#374151", fontSize: 11 }}>
+            Voice: {selectedVoice} · {voiceSpeed.toFixed(1)}× · Vol {Math.round(outputVolume * 100)}%
+          </span>
+        </div>
+
+        {/* Log entries */}
+        <div style={{
+          maxHeight: 140,
+          overflowY: "auto",
+          fontSize: 11,
+          lineHeight: 1.55,
+          color: "#6b7280",
+          scrollbarWidth: "thin",
+        }}>
+          {terminalLog.length === 0 ? (
+            <span style={{ color: "#374151", fontStyle: "italic" }}>System ready. Start a call to see live status.</span>
+          ) : (
+            terminalLog.map((entry, i) => {
+              const color =
+                entry.type === "api-ok"  ? "#10b981" :
+                entry.type === "api-err" ? "#ef4444" :
+                entry.type === "error"   ? "#f87171" :
+                entry.type === "api-start" ? "#f59e0b" :
+                entry.type === "state"   ? "#60a5fa" :
+                entry.type === "info"    ? "#a78bfa" :
+                "#6b7280";
+              return (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                  <span style={{ color: "#374151", flexShrink: 0 }}>{entry.ts}</span>
+                  <span style={{ color }}>{entry.message}</span>
+                  {entry.detail ? <span style={{ color: "#4b5563", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.detail}</span> : null}
+                </div>
+              );
+            })
+          )}
+          <div ref={terminalEndRef} />
+        </div>
+      </div>
+
+      {/* Info Grid */}
       <div className="reception-grid">
         <div className="reception-card">
           <span>Latest transcript</span>
-          <p>{lastTranscript || "The customer speech transcript will appear here during the call."}</p>
+          <p>{lastTranscript || "Customer speech transcript will appear here during the call."}</p>
         </div>
         <div className="reception-card">
           <span>Assistant reply</span>
-          <p>{lastReply || "The assistant greeting and next smart question will appear here."}</p>
+          <p>{lastReply || "AI greeting and next smart question will appear here."}</p>
         </div>
         <div className="reception-card">
           <span>Live summary</span>
@@ -949,14 +1248,15 @@ export default function AahaasAssistentFinalV01() {
         </div>
       </div>
 
+      {/* Quick Test Chat */}
       <div className="trip-summary-card reception-test-card">
         <span>Quick test chat</span>
-        <p>Use this small text box during testing if you want to simulate caller answers without the microphone.</p>
+        <p>Simulate caller answers without the microphone — useful for testing.</p>
         <div className="reception-test-row">
           <input
             className="records-search reception-test-input"
             value={testMessage}
-            onChange={(event) => setTestMessage(event.target.value)}
+            onChange={(e) => setTestMessage(e.target.value)}
             placeholder="Type a caller answer for testing..."
           />
           <button
@@ -970,21 +1270,21 @@ export default function AahaasAssistentFinalV01() {
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="reception-columns">
         <div className="conversation-log reception-log" aria-live="polite">
           {conversation.length === 0 ? (
             <p className="empty-state">
-              Start the call and the assistant will collect caller details and service
-              requirements one natural question at a time.
+              Start the call — the assistant will ask how it can help, silently apply defaults (2 PAX · 3-star · 3 nights · next week · SriLanka ), fetch the best package, then present a full summary. After the customer confirms, it collects name → contact → email,Phone,Country,Name  and sends the quotation via WhatsApp and email Reconfirm the WA Number Before end call or Send Qutations.
             </p>
           ) : (
-            conversation.map((message, index) => (
+            conversation.map((msg, idx) => (
               <article
-                key={`${message.role}-aahaas-v01-${index}`}
-                className={`message-bubble message-${message.role}`}
+                key={`${msg.role}-v01-${idx}`}
+                className={`message-bubble message-${msg.role}`}
               >
-                <span>{message.role === "assistant" ? "AI assistant" : "Caller"}</span>
-                <p>{message.content}</p>
+                <span>{msg.role === "assistant" ? "AI assistant" : "Caller"}</span>
+                <p>{msg.content}</p>
               </article>
             ))
           )}
@@ -994,32 +1294,38 @@ export default function AahaasAssistentFinalV01() {
           <div className="trip-summary-card">
             <span>Customer information</span>
             {profileFields.map(([label, value]) => (
-              <p key={label}>
-                <strong>{label}:</strong> {formatProfileValue(value)}
-              </p>
+              <p key={label}><strong>{label}:</strong> {formatProfileValue(value)}</p>
             ))}
           </div>
+          {quotationStatus ? (
+            <div className="trip-summary-card" style={{
+              borderLeft: `3px solid ${quotationStatus.sent ? "#10b981" : "#ef4444"}`,
+            }}>
+              <span style={{ color: quotationStatus.sent ? "#10b981" : "#ef4444" }}>
+                Quotation {quotationStatus.sent ? "Sent ✓" : "Not Sent ✗"}
+              </span>
+              <p>
+                <strong>WhatsApp:</strong> {quotationStatus.api ? "Sent ✓" : "Not sent"}
+                {quotationStatus.waId ? <span style={{ color: "#6b7280", fontSize: 12 }}> (+{quotationStatus.waId})</span> : null}
+                &nbsp;&nbsp;
+                <strong>Email:</strong> {quotationStatus.email ? "Sent ✓" : "Not sent"}
+              </p>
+              {quotationStatus.error ? (
+                <p style={{ color: "#f87171", fontSize: 12 }}>{quotationStatus.error}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="trip-summary-card">
             <span>Detected service categories</span>
-            <p>
-              {serviceCategories.length > 0
-                ? serviceCategories.join(", ")
-                : "No category confirmed yet."}
-            </p>
+            <p>{serviceCategories.length > 0 ? serviceCategories.join(", ") : "No category confirmed yet."}</p>
           </div>
           <div className="trip-summary-card">
             <span>Aahaas package status</span>
             <p>{packageStatusLabel}</p>
             {customerProfile.travel_package_prompt ? (
-              <p>
-                <strong>Prompt:</strong> {customerProfile.travel_package_prompt}
-              </p>
+              <p><strong>Prompt:</strong> {customerProfile.travel_package_prompt}</p>
             ) : null}
-            {packageIssue ? (
-              <p>
-                <strong>Issue:</strong> {packageIssue}
-              </p>
-            ) : null}
+            {packageIssue ? <p><strong>Issue:</strong> {packageIssue}</p> : null}
           </div>
           {customerProfile.suggested_package ? (
             <div className="trip-summary-card">
@@ -1033,15 +1339,11 @@ export default function AahaasAssistentFinalV01() {
               <p>{finalReport.summary || "No summary returned."}</p>
               <p>
                 <strong>Products needed:</strong>{" "}
-                {finalReport.products_needed?.length
-                  ? finalReport.products_needed.join(", ")
-                  : "Not specified"}
+                {finalReport.products_needed?.length ? finalReport.products_needed.join(", ") : "Not specified"}
               </p>
               <p>
                 <strong>Follow-up:</strong>{" "}
-                {finalReport.follow_up_actions?.length
-                  ? finalReport.follow_up_actions.join(", ")
-                  : "None"}
+                {finalReport.follow_up_actions?.length ? finalReport.follow_up_actions.join(", ") : "None"}
               </p>
             </div>
           ) : null}
