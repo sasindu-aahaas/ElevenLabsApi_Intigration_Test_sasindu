@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import AahaasAssistantCall from "./components/AahaasAssistantCall";
+import AahaasChatGpt3vHome from "./components/AahaasChatGpt3vHome";
 import AiAssistentFinalTest from "./components/AiAssistentFinalTest";
 import AssistenUvindu from "./components/Assisten_Uvindu";
 import RecordsPage from "./components/RecordsPage";
@@ -18,6 +19,12 @@ const BACKEND_OPTIONS = {
 };
 
 const WORKSPACE_MODES = [
+  {
+    id: "aahaas-chatgpt-3v",
+    label: "AaHAAs ChatGPT 3v",
+    kicker: "OpenAI home receptionist",
+    description: "Cloned Aahaas receptionist intake call with OpenAI voices, random Sol or Cove selection, report saving, and optional background music."
+  },
   {
     id: "ai-assistent-final-test",
     label: "AI ASSISTENT FINAL TEST",
@@ -95,7 +102,7 @@ export default function App() {
   const [page, setPage] = useState(() =>
     typeof window !== "undefined" && window.location.hash === "#/records" ? "records" : "workspace"
   );
-  const [activeMode, setActiveMode] = useState("ai-assistent-final-test");
+  const [activeMode, setActiveMode] = useState("aahaas-chatgpt-3v");
   const [speechText, setSpeechText] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState("");
@@ -575,6 +582,10 @@ export default function App() {
       return <AiAssistentFinalTest />;
     }
 
+    if (activeMode === "aahaas-chatgpt-3v") {
+      return <AahaasChatGpt3vHome />;
+    }
+
     if (activeMode === "reception") {
       return <ReceptionistCall />;
     }
@@ -695,7 +706,7 @@ export default function App() {
               <p className="eyebrow">Voice AI Workspace</p>
               <h1>Switch between every Aahaas voice service in one clean workspace</h1>
               <p className="hero-copy">
-                Start with the new AI ASSISTENT FINAL TEST on the home page, then switch
+                Start with the new AaHAAs ChatGPT 3v home receptionist, then switch
                 through text-to-speech, classic AI calling, receptionist intake, trip
                 planning, and typed voice chat in one clean workspace.
               </p>
