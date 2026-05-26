@@ -3,14 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\ServiceCall;
-use App\Services\AahaasChatGpt3vService;
+use App\Services\FiveVChatGptAssisService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
 
-class AahaasChatGpt3vTurnController extends Controller
+class FiveVChatGptAssisTurnController extends Controller
 {
-    public function __invoke(Request $request, AahaasChatGpt3vService $service): JsonResponse
+    public function __invoke(Request $request, FiveVChatGptAssisService $service): JsonResponse
     {
         $validated = $request->validate([
             'call_id' => ['required', 'string', 'exists:service_calls,call_id'],
@@ -216,7 +216,7 @@ class AahaasChatGpt3vTurnController extends Controller
             $status = $throwable->getCode();
 
             return response()->json([
-                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : 'AaHAAs ChatGPT 3v call turn failed.',
+                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : '5v ChatGPT ASSIS call turn failed.',
             ], is_int($status) && $status >= 400 && $status < 600 ? $status : 500);
         }
     }

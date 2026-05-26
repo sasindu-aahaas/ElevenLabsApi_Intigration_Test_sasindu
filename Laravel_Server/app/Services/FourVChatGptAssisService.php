@@ -7,7 +7,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
-class AahaasChatGpt3vService extends AiAssistentFinalTestService
+class FourVChatGptAssisService extends AiAssistentFinalTestService
 {
     private const SUPPORTED_VOICES = [
         'alloy',
@@ -32,11 +32,12 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
 
     public function initializeCustomerProfile(?string $selectedVoice = null, ?float $speechSpeed = null): array
     {
-        $voiceId = $this->normalizeVoiceSelection($selectedVoice);
+        $selection = $this->resolveVoiceSelection($selectedVoice);
 
         return [
             'package_state' => 'not_started',
-            'assistant_voice_id' => $voiceId,
+            'assistant_voice_id' => $selection['voice_id'],
+            'assistant_voice_label' => $selection['voice_label'],
             'assistant_speech_speed' => $this->normalizeSpeechSpeed($speechSpeed),
         ];
     }
@@ -56,6 +57,30 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
                 'goal' => 'Open the call briefly, optionally allow the customer to share their name, and ask what they want in one short spoken line.',
             ],
             'Hello, welcome to Aahaas. Tell me what you want, and I will search the best matching product for you.'
+        );
+    }
+
+    public function buildSilenceNudge(): string
+    {
+        return $this->generateVoiceLine(
+            'silence_nudge',
+            [],
+            [
+                'goal' => 'Ask the caller to continue after silence or unclear audio in one short natural line.',
+            ],
+            'Please go ahead whenever you are ready.'
+        );
+    }
+
+    public function buildGenericContinueReply(): string
+    {
+        return $this->generateVoiceLine(
+            'generic_continue',
+            [],
+            [
+                'goal' => 'Ask for a little more detail in one short natural line when the assistant needs to continue the call.',
+            ],
+            'Please tell me a little more so I can help you properly.'
         );
     }
 
@@ -178,7 +203,7 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
         $reply = trim((string) ($decoded['reply'] ?? ''));
 
         if ($reply === '') {
-            $reply = 'Please tell me a little more so I can help you properly.';
+            $reply = $this->buildGenericContinueReply();
         }
 
         return [
@@ -277,7 +302,13 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
 
     public function getVoiceLabel(array $customerProfile = []): string
     {
-        return $this->normalizeVoiceSelection((string) ($customerProfile['assistant_voice_id'] ?? ''));
+        $storedLabel = trim((string) ($customerProfile['assistant_voice_label'] ?? ''));
+
+        if ($storedLabel !== '') {
+            return $storedLabel;
+        }
+
+        return $this->resolveVoiceSelection((string) ($customerProfile['assistant_voice_id'] ?? ''))['voice_label'];
     }
 
     private function chatGpt3vSystemPrompt(): string
@@ -414,17 +445,33 @@ PROMPT;
 
     private function normalizeVoiceSelection(?string $selectedVoice): string
     {
+        return $this->resolveVoiceSelection($selectedVoice)['voice_id'];
+    }
+
+    private function resolveVoiceSelection(?string $selectedVoice): array
+    {
         $voice = strtolower(trim((string) $selectedVoice));
 
         if (isset(self::VOICE_ALIASES[$voice])) {
-            return self::VOICE_ALIASES[$voice];
+            return [
+                'voice_id' => self::VOICE_ALIASES[$voice],
+                'voice_label' => ucfirst($voice),
+            ];
         }
 
         if (in_array($voice, self::SUPPORTED_VOICES, true)) {
-            return $voice;
+            return [
+                'voice_id' => $voice,
+                'voice_label' => ucfirst($voice),
+            ];
         }
 
-        return 'marin';
+        $randomAlias = (string) array_rand(self::VOICE_ALIASES);
+
+        return [
+            'voice_id' => self::VOICE_ALIASES[$randomAlias],
+            'voice_label' => ucfirst($randomAlias),
+        ];
     }
 
     private function normalizeSpeechSpeed(mixed $speed): float

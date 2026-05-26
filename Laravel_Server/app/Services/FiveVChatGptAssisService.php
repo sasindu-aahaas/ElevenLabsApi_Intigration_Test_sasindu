@@ -7,20 +7,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
-class AahaasChatGpt3vService extends AiAssistentFinalTestService
+class FiveVChatGptAssisService extends AiAssistentFinalTestService
 {
     private const SUPPORTED_VOICES = [
-        'alloy',
-        'echo',
-        'fable',
-        'onyx',
-        'nova',
-        'shimmer',
-        'coral',
-        'verse',
-        'ballad',
-        'ash',
-        'sage',
         'marin',
         'cedar',
     ];
@@ -43,7 +32,7 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
 
     public function getSupportedVoices(): array
     {
-        return self::SUPPORTED_VOICES;
+        return ['random', 'sol', 'cove'];
     }
 
     public function buildGreeting(string $callId): string
@@ -271,13 +260,15 @@ class AahaasChatGpt3vService extends AiAssistentFinalTestService
             'body' => $response->body(),
             'mime_type' => $response->header('Content-Type', 'audio/wav'),
             'voice' => $voiceId,
-            'voice_label' => $voiceId,
+            'voice_label' => $this->getVoiceLabel(['assistant_voice_id' => $voiceId]),
         ];
     }
 
     public function getVoiceLabel(array $customerProfile = []): string
     {
-        return $this->normalizeVoiceSelection((string) ($customerProfile['assistant_voice_id'] ?? ''));
+        $voiceId = $this->normalizeVoiceSelection((string) ($customerProfile['assistant_voice_id'] ?? ''));
+
+        return $voiceId === 'cedar' ? 'cove' : 'sol';
     }
 
     private function chatGpt3vSystemPrompt(): string
@@ -415,6 +406,10 @@ PROMPT;
     private function normalizeVoiceSelection(?string $selectedVoice): string
     {
         $voice = strtolower(trim((string) $selectedVoice));
+
+        if ($voice === '' || $voice === 'random') {
+            return random_int(0, 1) === 0 ? 'marin' : 'cedar';
+        }
 
         if (isset(self::VOICE_ALIASES[$voice])) {
             return self::VOICE_ALIASES[$voice];

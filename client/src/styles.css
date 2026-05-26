@@ -913,6 +913,49 @@ button:disabled {
   box-shadow: 0 18px 36px rgba(255, 121, 104, 0.16);
 }
 
+.api-monitor-card {
+  background: linear-gradient(135deg, rgba(232, 244, 255, 0.92), rgba(255, 247, 234, 0.92));
+  border: 1px solid rgba(22, 33, 31, 0.08);
+}
+
+.api-monitor-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.api-monitor-head strong {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #2c4f85;
+}
+
+.api-monitor-endpoint {
+  margin: 10px 0 0;
+  color: #4e646f;
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+
+.api-monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+
+.api-monitor-grid p,
+.api-monitor-error {
+  margin-bottom: 0;
+}
+
+.api-monitor-error {
+  margin-top: 12px;
+  color: #a22718;
+}
+
 .reception-search-row {
   display: flex;
   gap: 14px;

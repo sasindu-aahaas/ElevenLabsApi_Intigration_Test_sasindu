@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import AahaasAssistantCall from "./components/AahaasAssistantCall";
+import AahaasAssistentFinalV01 from "./components/AahaasAssistentFinalV01";
 import AahaasChatGpt3vHome from "./components/AahaasChatGpt3vHome";
 import AiAssistentFinalTest from "./components/AiAssistentFinalTest";
 import AssistenUvindu from "./components/Assisten_Uvindu";
+import FiveVChatGptAssis from "./components/FiveVChatGptAssis";
+import FourVChatGptAssis from "./components/FourVChatGptAssis";
 import RecordsPage from "./components/RecordsPage";
 import ReceptionistCall from "./components/ReceptionistCall";
+import SixVChatGptAssis from "./components/SixVChatGptAssis";
 import TripPlannerCall from "./components/TripPlannerCall";
 
 const BACKEND_OPTIONS = {
@@ -20,6 +24,24 @@ const BACKEND_OPTIONS = {
 
 const WORKSPACE_MODES = [
   {
+    id: "5v-chatgpt-assis",
+    label: "5v ChatGPT ASSIS",
+    kicker: "OpenAI voice receptionist",
+    description: "Cloned AI ASSISTENT FINAL TEST flow with ChatGPT voices only, random Sol or Cove voice selection, full report saving, and live voice controls."
+  },
+  {
+    id: "6v-chatgpt-assis",
+    label: "6v ChatGPT ASSIS",
+    kicker: "OpenAI voice receptionist",
+    description: "Cloned AI ASSISTENT FINAL TEST flow with ChatGPT voices only, random Sol or Cove voice selection, full report saving, and live voice controls."
+  },
+  {
+    id: "4v-chatgpt-assis",
+    label: "4v ChatGPT ASSIS",
+    kicker: "OpenAI voice receptionist",
+    description: "Cloned receptionist intake flow with low-latency OpenAI voices, random Sol or Cove default voice, report saving, and live call controls."
+  },
+  {
     id: "aahaas-chatgpt-3v",
     label: "AaHAAs ChatGPT 3v",
     kicker: "OpenAI home receptionist",
@@ -30,6 +52,12 @@ const WORKSPACE_MODES = [
     label: "AI ASSISTENT FINAL TEST",
     kicker: "Home page receptionist",
     description: "Animated Aahaas receptionist intake call using ElevenLabs voice and ChatGPT only for reasoning and follow-up questions."
+  },
+  {
+    id: "aahaas-assistent-final-v01",
+    label: "Aahaas Assistent Final (V0.1)",
+    kicker: "Home page receptionist",
+    description: "Cloned from AI ASSISTENT FINAL TEST with the same ElevenLabs voice flow and natural intake conversation."
   },
   {
     id: "tts",
@@ -459,6 +487,10 @@ export default function App() {
   const activeModeMeta = WORKSPACE_MODES.find((mode) => mode.id === activeMode) || WORKSPACE_MODES[0];
 
   function renderActivePanel() {
+    if (activeMode === "4v-chatgpt-assis") {
+      return <FourVChatGptAssis />;
+    }
+
     if (activeMode === "tts") {
       return (
         <div className="panel workspace-panel">
@@ -582,8 +614,20 @@ export default function App() {
       return <AiAssistentFinalTest />;
     }
 
+    if (activeMode === "aahaas-assistent-final-v01") {
+      return <AahaasAssistentFinalV01 />;
+    }
+
     if (activeMode === "aahaas-chatgpt-3v") {
       return <AahaasChatGpt3vHome />;
+    }
+
+    if (activeMode === "5v-chatgpt-assis") {
+      return <FiveVChatGptAssis />;
+    }
+
+    if (activeMode === "6v-chatgpt-assis") {
+      return <SixVChatGptAssis />;
     }
 
     if (activeMode === "reception") {

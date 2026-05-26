@@ -3,14 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\ServiceCall;
-use App\Services\AahaasChatGpt3vService;
+use App\Services\FourVChatGptAssisService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
 
-class AahaasChatGpt3vTurnController extends Controller
+class FourVChatGptAssisTurnController extends Controller
 {
-    public function __invoke(Request $request, AahaasChatGpt3vService $service): JsonResponse
+    public function __invoke(Request $request, FourVChatGptAssisService $service): JsonResponse
     {
         $validated = $request->validate([
             'call_id' => ['required', 'string', 'exists:service_calls,call_id'],
@@ -57,12 +57,7 @@ class AahaasChatGpt3vTurnController extends Controller
             }
 
             if ($transcript === '__silent__' || mb_strlen($transcript) < 2) {
-                $nudges = [
-                    "Are you still with me? Please go ahead when you're ready.",
-                    'Take your time. What would you like help with?',
-                    "No rush. Please tell me a little more when you're ready.",
-                ];
-                $nudge = $nudges[array_rand($nudges)];
+                $nudge = $service->buildSilenceNudge();
                 $speech = $service->synthesizeSpeechForProfile($nudge, $customerProfile);
 
                 return response()->json([
@@ -177,7 +172,7 @@ class AahaasChatGpt3vTurnController extends Controller
             $reply = trim((string) $reply);
 
             if ($reply === '') {
-                $reply = 'Please tell me a little more so I can help you properly.';
+                $reply = $service->buildGenericContinueReply();
                 $turn['should_end'] = false;
                 $turn['ended_reason'] = '';
             }
@@ -216,7 +211,7 @@ class AahaasChatGpt3vTurnController extends Controller
             $status = $throwable->getCode();
 
             return response()->json([
-                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : 'AaHAAs ChatGPT 3v call turn failed.',
+                'message' => $throwable->getMessage() !== '' ? $throwable->getMessage() : '4v ChatGPT ASSIS call turn failed.',
             ], is_int($status) && $status >= 400 && $status < 600 ? $status : 500);
         }
     }

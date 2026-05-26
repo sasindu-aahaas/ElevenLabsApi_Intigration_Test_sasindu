@@ -1,21 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_LARAVEL_API_BASE_URL || "http://localhost:8000/api";
-const HOLD_MUSIC_URL = `${API_BASE_URL}/aahaas-chatgpt-3v/hold-music`;
+const FLOW_SLUG = "5v-chatgpt-assis";
+const HOLD_MUSIC_URL = `${API_BASE_URL}/${FLOW_SLUG}/hold-music`;
 const OPENAI_VOICE_OPTIONS = [
-  "alloy",
-  "echo",
-  "fable",
-  "onyx",
-  "nova",
-  "shimmer",
-  "coral",
-  "verse",
-  "ballad",
-  "ash",
-  "sage",
-  "marin",
-  "cedar",
+  "random",
+  "sol",
+  "cove",
 ];
 
 function createAudioUrlFromBase64(base64, mimeType) {
@@ -113,7 +104,9 @@ function inferListeningProfile(questionText) {
 }
 
 function formatVoiceLabel(voice) {
-  if (!voice) return "Random";
+  if (!voice || voice === "random") return "Random (Sol or Cove)";
+  if (voice === "sol" || voice === "marin") return "Sol";
+  if (voice === "cove" || voice === "cedar") return "Cove";
   return voice.charAt(0).toUpperCase() + voice.slice(1);
 }
 
@@ -156,9 +149,9 @@ function formatElapsedMs(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function AahaasChatGpt3vHome() {
+export default function FiveVChatGptAssis() {
   const [callId, setCallId] = useState("");
-  const [callStatus, setCallStatus] = useState("Ready to start AaHAAs ChatGPT 3v.");
+  const [callStatus, setCallStatus] = useState("Ready to start 5v ChatGPT ASSIS.");
   const [phase, setPhase] = useState("idle");
   const [error, setError] = useState("");
   const [conversation, setConversation] = useState([]);
@@ -173,14 +166,15 @@ export default function AahaasChatGpt3vHome() {
   const [pulseLevel, setPulseLevel] = useState(0);
   const [listeningHint, setListeningHint] = useState("");
   const [musicEnabled, setMusicEnabled] = useState(true);
-  const [voiceLabel, setVoiceLabel] = useState("Marin");
-  const [selectedVoice, setSelectedVoice] = useState("marin");
+  const [voiceLabel, setVoiceLabel] = useState("Random (Sol or Cove)");
+  const [selectedVoice, setSelectedVoice] = useState("random");
   const [speechSpeed, setSpeechSpeed] = useState(1.1);
   const [agentVolume, setAgentVolume] = useState(0.95);
   const [musicVolume, setMusicVolume] = useState(0.18);
   const [micSensitivity, setMicSensitivity] = useState(10);
+  const [micMuted, setMicMuted] = useState(false);
   const [terminalFeed, setTerminalFeed] = useState(() => [
-    buildTerminalEntry("idle", "ready", "Aahaas runtime terminal ready.", { service: "aahaas-chatgpt-3v" }),
+    buildTerminalEntry("idle", "ready", "5v runtime terminal ready.", { service: FLOW_SLUG }),
   ]);
   const [searchRuntimeState, setSearchRuntimeState] = useState("idle");
   const [searchRuntimeId, setSearchRuntimeId] = useState("AHS-IDLE");
@@ -247,6 +241,27 @@ export default function AahaasChatGpt3vHome() {
       destroyAmbientMusic();
     }
   }, [musicEnabled, phase, musicVolume]);
+
+  useEffect(() => {
+    if (!callIdRef.current || !autoLoopEnabledRef.current) return;
+
+    if (micMuted) {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      stopMicrophone();
+      setListeningHint("Microphone muted. Unmute the mic to continue speaking.");
+      if (phase !== "assistant-speaking" && phase !== "processing" && phase !== "ending") {
+        setPhase("connected");
+        setCallStatus("Microphone muted.");
+      }
+      return;
+    }
+
+    if (phase === "connected") {
+      beginListening().catch(() => {});
+    }
+  }, [micMuted, phase]);
 
   useEffect(() => {
     return () => {
@@ -534,6 +549,11 @@ export default function AahaasChatGpt3vHome() {
         mainAudioUrlRef.current = "";
       }
       if (mainAudioRef.current === audio) mainAudioRef.current = null;
+      if (micMuted && autoLoopEnabledRef.current) {
+        setPhase("connected");
+        setCallStatus("Microphone muted.");
+        setListeningHint("Microphone muted. Unmute the mic to continue speaking.");
+      }
       onEnded?.();
     };
 
@@ -578,7 +598,7 @@ export default function AahaasChatGpt3vHome() {
     callIdRef.current = "";
     lastReplyRef.current = "";
     setCallId("");
-    setCallStatus("Ready to start AaHAAs ChatGPT 3v.");
+    setCallStatus("Ready to start 5v ChatGPT ASSIS.");
     setPhase("idle");
     setError("");
     setConversation([]);
@@ -592,6 +612,7 @@ export default function AahaasChatGpt3vHome() {
     setCallEnded(false);
     setPulseLevel(0);
     setListeningHint("");
+    setMicMuted(false);
     setVoiceLabel(formatVoiceLabel(selectedVoice));
     searchRuntimeIdRef.current = "AHS-IDLE";
     setSearchRuntimeId("AHS-IDLE");
@@ -606,7 +627,7 @@ export default function AahaasChatGpt3vHome() {
       lastHttpState: "",
     });
     setTerminalFeed([
-      buildTerminalEntry("idle", "ready", "Aahaas runtime terminal reset.", { service: "aahaas-chatgpt-3v" }),
+      buildTerminalEntry("idle", "ready", "5v runtime terminal reset.", { service: FLOW_SLUG }),
     ]);
   }
 
@@ -618,25 +639,25 @@ export default function AahaasChatGpt3vHome() {
       setError("");
       setCallEnded(false);
       const runtimeId = createSearchRuntimeId();
-      setRuntimeState("start", "Aahaas session boot started.", { runtime_id: runtimeId });
+      setRuntimeState("start", "5v session boot started.", { runtime_id: runtimeId });
       setPhase("ringing");
       setCallStatus("Calling Aahaas. Please wait while we connect the assistant.");
       playRingTone();
 
       await new Promise((resolve) => window.setTimeout(resolve, 1600));
       setPhase("connecting");
-      setCallStatus("Connecting you to AaHAAs ChatGPT 3v now...");
-      setRuntimeState("running", "Voice session connecting to Aahaas runtime.", { phase: "connecting" });
+      setCallStatus("Connecting you to 5v ChatGPT ASSIS now...");
+      setRuntimeState("running", "Voice session connecting to 5v runtime.", { phase: "connecting" });
       playConnectTone();
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/session`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voice: selectedVoice, speech_speed: speechSpeed }),
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "AaHAAs ChatGPT 3v session could not start.");
+      if (!response.ok) throw new Error(data.message || "5v ChatGPT ASSIS session could not start.");
 
       callIdRef.current = data.call_id || "";
       lastReplyRef.current = data.greeting || "";
@@ -645,7 +666,7 @@ export default function AahaasChatGpt3vHome() {
       setConversation(data.greeting ? [{ role: "assistant", content: data.greeting }] : []);
       setCallStatus("Connected. The AI receptionist is greeting you.");
       setVoiceLabel(formatVoiceLabel(data.voice_label || selectedVoice));
-      setRuntimeState("running", "Aahaas runtime connected and greeting started.", {
+      setRuntimeState("running", "5v runtime connected and greeting started.", {
         call_id: data.call_id || "",
         voice: data.voice_label || selectedVoice,
       });
@@ -656,19 +677,19 @@ export default function AahaasChatGpt3vHome() {
 
       const greetingUrl = createAudioUrlFromBase64(data.greeting_audio_base64, data.greeting_audio_mime_type);
       await playAgentAudio(greetingUrl, async () => {
-        if (autoLoopEnabledRef.current) await beginListening();
+        if (autoLoopEnabledRef.current && !micMuted) await beginListening();
       });
     } catch (err) {
       autoLoopEnabledRef.current = false;
       setPhase("idle");
       setError(err.message);
       setCallStatus("The call could not be started.");
-      setRuntimeState("error", "Aahaas session start failed.", { phase: "idle" });
+      setRuntimeState("error", "5v session start failed.", { phase: "idle" });
     }
   }
 
   async function beginListening() {
-    if (!callIdRef.current || !autoLoopEnabledRef.current || finalizingRef.current) return;
+    if (!callIdRef.current || !autoLoopEnabledRef.current || finalizingRef.current || micMuted) return;
 
     if (pendingPackagePayloadRef.current) {
       await presentQueuedPackagePayload();
@@ -814,25 +835,25 @@ export default function AahaasChatGpt3vHome() {
       formData.append("call_id", callIdRef.current);
       formData.append("transcript", "__silent__");
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/turn`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/turn`, {
         method: "POST",
         body: formData,
       });
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.audio_base64) {
-        if (autoLoopEnabledRef.current) await beginListening();
+        if (autoLoopEnabledRef.current && !micMuted) await beginListening();
         return;
       }
 
       setVoiceLabel(formatVoiceLabel(data.voice_label));
       const replyUrl = createAudioUrlFromBase64(data.audio_base64, data.audio_mime_type);
       await playAgentAudio(replyUrl, async () => {
-        if (autoLoopEnabledRef.current) await beginListening();
+        if (autoLoopEnabledRef.current && !micMuted) await beginListening();
       });
     } catch {
       setRuntimeState("error", "Silent input check failed; returning to listening state.");
-      if (autoLoopEnabledRef.current) await beginListening();
+      if (autoLoopEnabledRef.current && !micMuted) await beginListening();
     }
   }
 
@@ -846,7 +867,7 @@ export default function AahaasChatGpt3vHome() {
     updateApiMonitor("starting", { lastHttpState: "queued", lastError: "" });
 
     try {
-      await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-prefetch`, {
+      await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-prefetch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current }),
@@ -899,7 +920,7 @@ export default function AahaasChatGpt3vHome() {
     await playAgentAudio(replyUrl, async () => {
       if (data.failed) {
         setCallStatus("Package search had a problem. The assistant is continuing the conversation.");
-        if (autoLoopEnabledRef.current) await beginListening();
+        if (autoLoopEnabledRef.current && !micMuted) await beginListening();
         return;
       }
 
@@ -911,7 +932,7 @@ export default function AahaasChatGpt3vHome() {
         return;
       }
 
-      if (autoLoopEnabledRef.current) await beginListening();
+      if (autoLoopEnabledRef.current && !micMuted) await beginListening();
     });
   }
 
@@ -925,7 +946,7 @@ export default function AahaasChatGpt3vHome() {
 
     const poll = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-status`, {
+        const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ call_id: callIdRef.current }),
@@ -990,7 +1011,7 @@ export default function AahaasChatGpt3vHome() {
       await playHoldAudioLoop();
 
       const poll = async () => {
-        const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-status`, {
+        const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ call_id: callIdRef.current }),
@@ -1009,7 +1030,7 @@ export default function AahaasChatGpt3vHome() {
               stopHoldAudioLoop();
               setError(err.message);
               setRuntimeState("error", "Aahaas API polling failed.", { call_id: callIdRef.current });
-              if (autoLoopEnabledRef.current) await beginListening();
+              if (autoLoopEnabledRef.current && !micMuted) await beginListening();
             });
           }, 2500);
           return;
@@ -1038,7 +1059,7 @@ export default function AahaasChatGpt3vHome() {
         await playAgentAudio(replyUrl, async () => {
           if (data.failed) {
             setCallStatus("Package search had a problem. The assistant is continuing the conversation.");
-            if (autoLoopEnabledRef.current) await beginListening();
+            if (autoLoopEnabledRef.current && !micMuted) await beginListening();
             return;
           }
 
@@ -1050,7 +1071,7 @@ export default function AahaasChatGpt3vHome() {
             return;
           }
 
-          if (autoLoopEnabledRef.current) await beginListening();
+          if (autoLoopEnabledRef.current && !micMuted) await beginListening();
         });
       };
 
@@ -1060,7 +1081,7 @@ export default function AahaasChatGpt3vHome() {
       setError(err.message);
       setCallStatus("We could not finish checking the Aahaas package yet.");
       setRuntimeState("error", "Aahaas API wait cycle failed.", { call_id: callIdRef.current });
-      if (autoLoopEnabledRef.current) await beginListening();
+      if (autoLoopEnabledRef.current && !micMuted) await beginListening();
     }
   }
 
@@ -1075,16 +1096,16 @@ export default function AahaasChatGpt3vHome() {
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
-      if (audioBlob) formData.append("audio", audioBlob, "aahaas-chatgpt-3v.webm");
+      if (audioBlob) formData.append("audio", audioBlob, "5v-chatgpt-assis.webm");
       if (transcriptText.trim()) formData.append("transcript", transcriptText.trim());
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/turn`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/turn`, {
         method: "POST",
         body: formData,
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "AaHAAs ChatGPT 3v reply failed.");
+      if (!response.ok) throw new Error(data.message || "5v ChatGPT ASSIS reply failed.");
 
       setLastTranscript(data.transcript || "");
       lastReplyRef.current = data.reply || "";
@@ -1110,7 +1131,7 @@ export default function AahaasChatGpt3vHome() {
           await finalizeCall(data.ended_reason || "completed_by_assistant");
           return;
         }
-        if (autoLoopEnabledRef.current) await beginListening();
+        if (autoLoopEnabledRef.current && !micMuted) await beginListening();
       });
     } catch (err) {
       stopHoldAudioLoop();
@@ -1127,6 +1148,10 @@ export default function AahaasChatGpt3vHome() {
     await sendTurn(null, testMessage);
   }
 
+  function handleMicToggle() {
+    setMicMuted((current) => !current);
+  }
+
   async function finalizeCall(endedReason = "completed") {
     if (!callIdRef.current || finalizingRef.current) return;
 
@@ -1140,7 +1165,7 @@ export default function AahaasChatGpt3vHome() {
         call_id: callIdRef.current,
       });
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/end`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/end`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current, ended_reason: endedReason }),
@@ -1213,13 +1238,13 @@ export default function AahaasChatGpt3vHome() {
       <div className="panel-header reception-header">
         <div>
           <p className="eyebrow">OpenAI Voice</p>
-          <h2>AaHAAs ChatGPT 3v</h2>
+          <h2>5v ChatGPT ASSIS</h2>
           <p className="panel-copy reception-copy">
-            This is the cloned Aahaas product search flow. It keeps the conversation short,
-            searches the best fitting Aahaas package or product first, and asks for changes only after the summary.
+            Cloned from AI ASSISTENT FINAL TEST with OpenAI voice only. It uses ChatGPT reasoning,
+            randomly starts with Sol or Cove, applies fast default booking assumptions, and saves a full text report.
           </p>
         </div>
-        <span className="call-badge reception-badge">Home page flow</span>
+        <span className="call-badge reception-badge">OpenAI voice only</span>
       </div>
 
       <div className="reception-switch-row">
@@ -1229,7 +1254,15 @@ export default function AahaasChatGpt3vHome() {
             checked={musicEnabled}
             onChange={(event) => setMusicEnabled(event.target.checked)}
           />
-          <span>Background music</span>
+          <span>Background music {musicEnabled ? "On" : "Off"}</span>
+        </label>
+        <label className="reception-switch">
+          <input
+            type="checkbox"
+            checked={!micMuted}
+            onChange={handleMicToggle}
+          />
+          <span>Mic {!micMuted ? "On" : "Muted"}</span>
         </label>
         <label className="reception-voice-picker">
           <span>Voice agent</span>
@@ -1296,7 +1329,7 @@ export default function AahaasChatGpt3vHome() {
         <div className="reception-inline-meta">
           <span className="reception-mini-chip">Voice: {voiceLabel}</span>
           <span className="reception-mini-chip">OpenAI voice agent</span>
-          <span className="reception-mini-chip">Defaults: 2 pax, 3-star, 3 days, +7 days</span>
+          <span className="reception-mini-chip">Defaults: 2 pax, 3-star, 3 days, next week</span>
         </div>
       </div>
 
@@ -1338,7 +1371,7 @@ export default function AahaasChatGpt3vHome() {
       </div>
 
       {!callSupported ? (
-        <p className="error-text">This browser does not support microphone recording for AaHAAs ChatGPT 3v.</p>
+        <p className="error-text">This browser does not support microphone recording for 5v ChatGPT ASSIS.</p>
       ) : null}
       {error ? <p className="error-text">{error}</p> : null}
 

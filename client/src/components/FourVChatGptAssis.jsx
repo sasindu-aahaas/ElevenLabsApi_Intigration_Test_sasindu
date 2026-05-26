@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_LARAVEL_API_BASE_URL || "http://localhost:8000/api";
-const HOLD_MUSIC_URL = `${API_BASE_URL}/aahaas-chatgpt-3v/hold-music`;
+const FLOW_SLUG = "4v-chatgpt-assis";
+const HOLD_MUSIC_URL = `${API_BASE_URL}/${FLOW_SLUG}/hold-music`;
 const OPENAI_VOICE_OPTIONS = [
+  "random",
   "alloy",
   "echo",
   "fable",
@@ -113,7 +115,7 @@ function inferListeningProfile(questionText) {
 }
 
 function formatVoiceLabel(voice) {
-  if (!voice) return "Random";
+  if (!voice || voice === "random") return "Random (Sol or Cove)";
   return voice.charAt(0).toUpperCase() + voice.slice(1);
 }
 
@@ -156,9 +158,9 @@ function formatElapsedMs(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function AahaasChatGpt3vHome() {
+export default function FourVChatGptAssis() {
   const [callId, setCallId] = useState("");
-  const [callStatus, setCallStatus] = useState("Ready to start AaHAAs ChatGPT 3v.");
+  const [callStatus, setCallStatus] = useState("Ready to start 4v ChatGPT ASSIS.");
   const [phase, setPhase] = useState("idle");
   const [error, setError] = useState("");
   const [conversation, setConversation] = useState([]);
@@ -173,14 +175,14 @@ export default function AahaasChatGpt3vHome() {
   const [pulseLevel, setPulseLevel] = useState(0);
   const [listeningHint, setListeningHint] = useState("");
   const [musicEnabled, setMusicEnabled] = useState(true);
-  const [voiceLabel, setVoiceLabel] = useState("Marin");
-  const [selectedVoice, setSelectedVoice] = useState("marin");
+  const [voiceLabel, setVoiceLabel] = useState("Sol");
+  const [selectedVoice, setSelectedVoice] = useState("random");
   const [speechSpeed, setSpeechSpeed] = useState(1.1);
   const [agentVolume, setAgentVolume] = useState(0.95);
   const [musicVolume, setMusicVolume] = useState(0.18);
   const [micSensitivity, setMicSensitivity] = useState(10);
   const [terminalFeed, setTerminalFeed] = useState(() => [
-    buildTerminalEntry("idle", "ready", "Aahaas runtime terminal ready.", { service: "aahaas-chatgpt-3v" }),
+    buildTerminalEntry("idle", "ready", "4v runtime terminal ready.", { service: FLOW_SLUG }),
   ]);
   const [searchRuntimeState, setSearchRuntimeState] = useState("idle");
   const [searchRuntimeId, setSearchRuntimeId] = useState("AHS-IDLE");
@@ -578,7 +580,7 @@ export default function AahaasChatGpt3vHome() {
     callIdRef.current = "";
     lastReplyRef.current = "";
     setCallId("");
-    setCallStatus("Ready to start AaHAAs ChatGPT 3v.");
+    setCallStatus("Ready to start 4v ChatGPT ASSIS.");
     setPhase("idle");
     setError("");
     setConversation([]);
@@ -606,7 +608,7 @@ export default function AahaasChatGpt3vHome() {
       lastHttpState: "",
     });
     setTerminalFeed([
-      buildTerminalEntry("idle", "ready", "Aahaas runtime terminal reset.", { service: "aahaas-chatgpt-3v" }),
+      buildTerminalEntry("idle", "ready", "4v runtime terminal reset.", { service: FLOW_SLUG }),
     ]);
   }
 
@@ -625,18 +627,18 @@ export default function AahaasChatGpt3vHome() {
 
       await new Promise((resolve) => window.setTimeout(resolve, 1600));
       setPhase("connecting");
-      setCallStatus("Connecting you to AaHAAs ChatGPT 3v now...");
+      setCallStatus("Connecting you to 4v ChatGPT ASSIS now...");
       setRuntimeState("running", "Voice session connecting to Aahaas runtime.", { phase: "connecting" });
       playConnectTone();
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/session`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voice: selectedVoice, speech_speed: speechSpeed }),
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "AaHAAs ChatGPT 3v session could not start.");
+      if (!response.ok) throw new Error(data.message || "4v ChatGPT ASSIS session could not start.");
 
       callIdRef.current = data.call_id || "";
       lastReplyRef.current = data.greeting || "";
@@ -814,7 +816,7 @@ export default function AahaasChatGpt3vHome() {
       formData.append("call_id", callIdRef.current);
       formData.append("transcript", "__silent__");
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/turn`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/turn`, {
         method: "POST",
         body: formData,
       });
@@ -846,7 +848,7 @@ export default function AahaasChatGpt3vHome() {
     updateApiMonitor("starting", { lastHttpState: "queued", lastError: "" });
 
     try {
-      await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-prefetch`, {
+      await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-prefetch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current }),
@@ -925,7 +927,7 @@ export default function AahaasChatGpt3vHome() {
 
     const poll = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-status`, {
+        const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ call_id: callIdRef.current }),
@@ -990,7 +992,7 @@ export default function AahaasChatGpt3vHome() {
       await playHoldAudioLoop();
 
       const poll = async () => {
-        const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/package-status`, {
+        const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/package-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ call_id: callIdRef.current }),
@@ -1075,16 +1077,16 @@ export default function AahaasChatGpt3vHome() {
 
       const formData = new FormData();
       formData.append("call_id", callIdRef.current);
-      if (audioBlob) formData.append("audio", audioBlob, "aahaas-chatgpt-3v.webm");
+      if (audioBlob) formData.append("audio", audioBlob, "4v-chatgpt-assis.webm");
       if (transcriptText.trim()) formData.append("transcript", transcriptText.trim());
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/turn`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/turn`, {
         method: "POST",
         body: formData,
       });
 
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "AaHAAs ChatGPT 3v reply failed.");
+      if (!response.ok) throw new Error(data.message || "4v ChatGPT ASSIS reply failed.");
 
       setLastTranscript(data.transcript || "");
       lastReplyRef.current = data.reply || "";
@@ -1140,7 +1142,7 @@ export default function AahaasChatGpt3vHome() {
         call_id: callIdRef.current,
       });
 
-      const response = await fetch(`${API_BASE_URL}/aahaas-chatgpt-3v/end`, {
+      const response = await fetch(`${API_BASE_URL}/${FLOW_SLUG}/end`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ call_id: callIdRef.current, ended_reason: endedReason }),
@@ -1213,7 +1215,7 @@ export default function AahaasChatGpt3vHome() {
       <div className="panel-header reception-header">
         <div>
           <p className="eyebrow">OpenAI Voice</p>
-          <h2>AaHAAs ChatGPT 3v</h2>
+          <h2>4v ChatGPT ASSIS</h2>
           <p className="panel-copy reception-copy">
             This is the cloned Aahaas product search flow. It keeps the conversation short,
             searches the best fitting Aahaas package or product first, and asks for changes only after the summary.
@@ -1338,7 +1340,7 @@ export default function AahaasChatGpt3vHome() {
       </div>
 
       {!callSupported ? (
-        <p className="error-text">This browser does not support microphone recording for AaHAAs ChatGPT 3v.</p>
+        <p className="error-text">This browser does not support microphone recording for 4v ChatGPT ASSIS.</p>
       ) : null}
       {error ? <p className="error-text">{error}</p> : null}
 
