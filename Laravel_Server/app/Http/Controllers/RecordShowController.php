@@ -10,7 +10,7 @@ class RecordShowController extends Controller
 {
     public function __invoke(string $recordType, string $publicId): JsonResponse
     {
-        if ($recordType === 'service_call') {
+        if ($recordType === 'service_call' || $recordType === 'chatbot_session') {
             $call = ServiceCall::query()->where('call_id', $publicId)->firstOrFail();
 
             return response()->json([

@@ -17,6 +17,7 @@ class RecordsListController extends Controller
 
         if ($type === 'all' || $type === 'service_calls') {
             $serviceCalls = ServiceCall::query()
+                ->where('call_id', 'not like', 'CHAT-%')
                 ->when($search !== '', function ($query) use ($search): void {
                     $query->where('call_id', 'like', "%{$search}%")
                         ->orWhere('status', 'like', "%{$search}%")
@@ -40,6 +41,33 @@ class RecordsListController extends Controller
                 ->all();
 
             $records = array_merge($records, $serviceCalls);
+        }
+
+        if ($type === 'all' || $type === 'chatbot_sessions') {
+            $chatbotSessions = ServiceCall::query()
+                ->where('call_id', 'like', 'CHAT-%')
+                ->when($search !== '', function ($query) use ($search): void {
+                    $query->where('call_id', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%")
+                        ->orWhere('latest_report', 'like', "%{$search}%");
+                })
+                ->latest('created_at')
+                ->limit(100)
+                ->get()
+                ->map(fn (ServiceCall $call): array => [
+                    'record_type' => 'chatbot_session',
+                    'id' => $call->id,
+                    'public_id' => $call->call_id,
+                    'status' => $call->status,
+                    'summary' => $call->latest_report ?: 'No summary yet.',
+                    'categories' => $call->service_categories ?: [],
+                    'started_at' => optional($call->started_at)?->toIso8601String(),
+                    'ended_at' => optional($call->ended_at)?->toIso8601String(),
+                    'created_at' => optional($call->created_at)?->toIso8601String(),
+                ])
+                ->all();
+
+            $records = array_merge($records, $chatbotSessions);
         }
 
         if ($type === 'all' || $type === 'trip_plans') {

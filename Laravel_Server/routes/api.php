@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApiProxyController;
 use App\Http\Controllers\AahaasCallEndController;
 use App\Http\Controllers\AahaasCallSessionController;
 use App\Http\Controllers\AahaasCallTurnController;
@@ -36,6 +37,10 @@ use App\Http\Controllers\FiveVChatGptAssisTurnController;
 use App\Http\Controllers\UvinduCallEndController;
 use App\Http\Controllers\UvinduCallSessionController;
 use App\Http\Controllers\UvinduCallTurnController;
+use App\Http\Controllers\ChatbotPackageStatusController;
+use App\Http\Controllers\ChatbotSendQuotationController;
+use App\Http\Controllers\ChatbotSessionController;
+use App\Http\Controllers\ChatbotTurnController;
 use App\Http\Controllers\AiCallController;
 use App\Http\Controllers\ElevenLabsSignedUrlController;
 use App\Http\Controllers\RecordDownloadController;
@@ -50,6 +55,9 @@ use App\Http\Controllers\TripCallEndController;
 use App\Http\Controllers\TripCallSessionController;
 use App\Http\Controllers\TripCallTurnController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/proxy', ApiProxyController::class);
+Route::options('/proxy', fn () => response('', 204));
 
 Route::get('/health', fn () => response()->json([
     'status' => 'ok',
@@ -136,11 +144,20 @@ Route::options('/uvindu-call/end', fn () => response('', 204));
 Route::post('/reception-call/session', ReceptionCallSessionController::class);
 Route::post('/reception-call/turn', ReceptionCallTurnController::class);
 Route::post('/reception-call/end', ReceptionCallEndController::class);
+Route::post('/chatbot/session', ChatbotSessionController::class);
+Route::post('/chatbot/turn', ChatbotTurnController::class);
+Route::get('/chatbot/package-status/{sessionId}', ChatbotPackageStatusController::class);
+Route::post('/chatbot/send-quotation', ChatbotSendQuotationController::class);
+Route::options('/chatbot/session', fn () => response('', 204));
+Route::options('/chatbot/turn', fn () => response('', 204));
+Route::options('/chatbot/package-status/{sessionId}', fn () => response('', 204));
+Route::options('/chatbot/send-quotation', fn () => response('', 204));
+
 Route::get('/records', RecordsListController::class);
 Route::get('/records/{recordType}/{publicId}', RecordShowController::class)
-    ->whereIn('recordType', ['service_call', 'trip_plan']);
+    ->whereIn('recordType', ['service_call', 'chatbot_session', 'trip_plan']);
 Route::get('/records/{recordType}/{publicId}/download', RecordDownloadController::class)
-    ->whereIn('recordType', ['service_call', 'trip_plan']);
+    ->whereIn('recordType', ['service_call', 'chatbot_session', 'trip_plan']);
 Route::options('/tts', fn () => response('', 204));
 Route::options('/ai-call', fn () => response('', 204));
 Route::options('/text-ai-voice', fn () => response('', 204));

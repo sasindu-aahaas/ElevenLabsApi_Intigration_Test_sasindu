@@ -4,6 +4,8 @@ import AahaasAssistentFinalV01 from "./components/AahaasAssistentFinalV01";
 import AahaasChatGpt3vHome from "./components/AahaasChatGpt3vHome";
 import AiAssistentFinalTest from "./components/AiAssistentFinalTest";
 import AssistenUvindu from "./components/Assisten_Uvindu";
+import ApiTestPage from "./components/ApiTestPage";
+import ChatbotPage from "./components/ChatbotPage";
 import FiveVChatGptAssis from "./components/FiveVChatGptAssis";
 import FourVChatGptAssis from "./components/FourVChatGptAssis";
 import RecordsPage from "./components/RecordsPage";
@@ -126,9 +128,16 @@ function pickMimeType() {
   return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
+function pageFromHash(hash) {
+  if (hash === "#/records") return "records";
+  if (hash === "#/chatbot") return "chatbot";
+  if (hash === "#/apitest") return "apitest";
+  return "workspace";
+}
+
 export default function App() {
   const [page, setPage] = useState(() =>
-    typeof window !== "undefined" && window.location.hash === "#/records" ? "records" : "workspace"
+    typeof window !== "undefined" ? pageFromHash(window.location.hash) : "workspace"
   );
   const [activeMode, setActiveMode] = useState("aahaas-assistent-final-v01");
   const [speechText, setSpeechText] = useState("");
@@ -170,7 +179,7 @@ export default function App() {
     }
 
     const handleHashChange = () => {
-      setPage(window.location.hash === "#/records" ? "records" : "workspace");
+      setPage(pageFromHash(window.location.hash));
     };
 
     window.addEventListener("hashchange", handleHashChange);
@@ -475,12 +484,11 @@ export default function App() {
   }
 
   function navigateTo(nextPage) {
-    const nextHash = nextPage === "records" ? "#/records" : "#/";
-
+    const hashMap = { records: "#/records", chatbot: "#/chatbot", apitest: "#/apitest" };
+    const nextHash = hashMap[nextPage] || "#/";
     if (typeof window !== "undefined" && window.location.hash !== nextHash) {
       window.location.hash = nextHash;
     }
-
     setPage(nextPage);
   }
 
@@ -712,96 +720,112 @@ export default function App() {
     );
   }
 
+  const NAV_ITEMS = [
+    { id: "workspace", label: "Voice Workspace", icon: "🎙" },
+    { id: "chatbot",   label: "Chatbot",         icon: "🤖" },
+    { id: "records",   label: "Stored Records",  icon: "🗄" },
+    { id: "apitest",   label: "API Test Lab",    icon: "⚡" },
+  ];
+
   return (
-    <main className="page-shell">
-      <header className="top-nav">
-        <div>
-          <p className="eyebrow">Aahaas Console</p>
-          <strong className="top-nav-title">Voice services and stored call intelligence</strong>
+    <div style={{ fontFamily: "'Space Grotesk','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+
+      {/* ── TOP NAV ── */}
+      <header style={{
+        background: "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)",
+        padding: "0 24px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
+        height: 60, flexShrink: 0,
+      }}>
+        {/* Logo / title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+            ✦
+          </div>
+          <div>
+            <div style={{ color: "#fff", fontWeight: 800, fontSize: 14, letterSpacing: "-0.01em" }}>Aahaas Console</div>
+            <div style={{ color: "#475569", fontSize: 10, fontWeight: 600 }}>Voice AI · Chatbot · Records</div>
+          </div>
         </div>
-        <div className="top-nav-actions" role="tablist" aria-label="App sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={page === "workspace"}
-            className={`secondary-button top-nav-button ${page === "workspace" ? "top-nav-button-active" : ""}`}
-            onClick={() => navigateTo("workspace")}
-          >
-            Voice Workspace
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={page === "records"}
-            className={`secondary-button top-nav-button ${page === "records" ? "top-nav-button-active" : ""}`}
-            onClick={() => navigateTo("records")}
-          >
-            Stored Records
-          </button>
-        </div>
+
+        {/* Nav tabs */}
+        <nav style={{ display: "flex", gap: 4 }}>
+          {NAV_ITEMS.map((item) => {
+            const active = page === item.id;
+            return (
+              <button key={item.id} type="button" onClick={() => navigateTo(item.id)} style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+                fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+                background: active ? "rgba(99,102,241,0.2)" : "transparent",
+                color: active ? "#a5b4fc" : "#64748b",
+                outline: active ? "1px solid rgba(99,102,241,0.35)" : "1px solid transparent",
+              }}>
+                <span style={{ fontSize: 14 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Right: active mode badge (workspace only) */}
+        {page === "workspace" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "#64748b" }}>Mode:</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#a5b4fc", background: "rgba(99,102,241,0.12)", padding: "3px 10px", borderRadius: 7, border: "1px solid rgba(99,102,241,0.2)" }}>
+              {activeModeMeta.label}
+            </span>
+          </div>
+        )}
       </header>
 
-      {page === "records" ? (
-        <RecordsPage />
-      ) : (
-        <>
-          <section className="hero-card">
-            <div>
-              <p className="eyebrow">Voice AI Workspace</p>
-              <h1>Switch between every Aahaas voice service in one clean workspace</h1>
-              <p className="hero-copy">
-                Start with the new AaHAAs ChatGPT 3v home receptionist, then switch
-                through text-to-speech, classic AI calling, receptionist intake, trip
-                planning, and typed voice chat in one clean workspace.
-              </p>
-            </div>
-            <div className="status-card">
-              <span>Active experience</span>
-              <strong>{activeModeMeta.label}</strong>
-              <span>Quick state</span>
-              <strong>
-                {activeMode === "ai-call"
-                  ? isRecording
-                    ? "Listening"
-                    : isCalling
-                      ? "Processing"
-                      : "Idle"
-                  : activeMode === "tts"
-                    ? speaking
-                      ? "Generating"
-                      : "Ready"
-                    : "Live"}
-              </strong>
-            </div>
-          </section>
+      {/* ── PAGE CONTENT ── */}
+      <div style={{ flex: 1, overflow: "auto" }}>
+        {page === "records" ? (
+          <RecordsPage />
+        ) : page === "chatbot" ? (
+          <ChatbotPage />
+        ) : page === "apitest" ? (
+          <ApiTestPage />
+        ) : (
+          /* ── WORKSPACE ── */
+          <div style={{ padding: "16px 16px 32px" }}>
 
-          <section className="workspace-shell">
-            <div className="mode-toggle-strip" role="tablist" aria-label="Voice service mode switcher">
-              {WORKSPACE_MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMode === mode.id}
-                  className={`mode-toggle ${activeMode === mode.id ? "mode-toggle-active" : ""}`}
-                  onClick={() => setActiveMode(mode.id)}
-                >
-                  <span>{mode.label}</span>
-                  <small>{mode.kicker}</small>
-                </button>
-              ))}
+            {/* Mode selector row */}
+            <div style={{
+              background: "rgba(255,255,255,0.95)", border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 14, padding: "12px 16px", marginBottom: 14,
+              boxShadow: "0 2px 12px rgba(15,23,42,0.06)",
+              display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+            }}>
+              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>
+                Select Mode
+              </span>
+              <select
+                value={activeMode}
+                onChange={(e) => setActiveMode(e.target.value)}
+                style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 13, color: "#1e293b", outline: "none", cursor: "pointer", minWidth: 260 }}
+              >
+                {WORKSPACE_MODES.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label} — {m.kicker}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 12, color: "#64748b", flex: 1 }}>{activeModeMeta.description}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["ai-call", "tts"].includes(activeMode) && (
+                  <span style={{ fontSize: 11, fontWeight: 700, background: speaking || isRecording || isCalling ? "rgba(245,158,11,0.12)" : "rgba(16,185,129,0.1)", color: speaking || isRecording || isCalling ? "#d97706" : "#10b981", padding: "4px 12px", borderRadius: 20, border: `1px solid ${speaking || isRecording || isCalling ? "rgba(245,158,11,0.25)" : "rgba(16,185,129,0.2)"}` }}>
+                    {isRecording ? "● Recording" : isCalling ? "● Processing" : speaking ? "● Speaking" : "● Idle"}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="mode-preview-card">
-              <span>Selected mode</span>
-              <strong>{activeModeMeta.label}</strong>
-              <p>{activeModeMeta.description}</p>
-            </div>
-
-            <section className="workspace-canvas">{renderActivePanel()}</section>
-          </section>
-        </>
-      )}
-    </main>
+            {/* Panel */}
+            <section>{renderActivePanel()}</section>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
