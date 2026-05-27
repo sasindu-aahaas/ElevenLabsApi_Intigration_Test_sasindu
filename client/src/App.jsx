@@ -130,7 +130,7 @@ export default function App() {
   const [page, setPage] = useState(() =>
     typeof window !== "undefined" && window.location.hash === "#/records" ? "records" : "workspace"
   );
-  const [activeMode, setActiveMode] = useState("aahaas-chatgpt-3v");
+  const [activeMode, setActiveMode] = useState("aahaas-assistent-final-v01");
   const [speechText, setSpeechText] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState("");

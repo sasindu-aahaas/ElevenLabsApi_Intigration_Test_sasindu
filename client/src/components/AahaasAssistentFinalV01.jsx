@@ -932,424 +932,444 @@ export default function AahaasAssistentFinalV01() {
     });
   }
 
-  const terminalState = TERMINAL_STATES[phase] || TERMINAL_STATES.idle;
-  const profileFields = [
-    ["Full name",       customerProfile.full_name],
-    ["Contact number",  customerProfile.contact_number],
-    ["Email",           customerProfile.email_address],
-    ["Country",         customerProfile.current_living_country],
-  ];
+  // ── Derived values ────────────────────────────────────────────────────────
+  const terminalState      = TERMINAL_STATES[phase] || TERMINAL_STATES.idle;
   const packageStatusLabel = getPackageStatusLabel(customerProfile);
-  const packageIssue = customerProfile.package_lookup_error || "";
+  const packageIssue       = customerProfile.package_lookup_error || "";
+  const controlDisabled    = !["idle", "completed", "failed", "timeout"].includes(phase);
 
+  const phaseColorMap = {
+    idle: "#94a3b8", ringing: "#3b82f6", connecting: "#3b82f6", connected: "#3b82f6",
+    listening: "#10b981", processing: "#f59e0b", "wait-for-response": "#f59e0b",
+    "assistant-speaking": "#8b5cf6", ending: "#f97316",
+    completed: "#10b981", failed: "#ef4444", timeout: "#ef4444",
+  };
+  const phaseColor = phaseColorMap[phase] || "#94a3b8";
+
+  // ── Style tokens ──────────────────────────────────────────────────────────
+  const card = {
+    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 14,
+    padding: "16px 18px",
+    boxShadow: "0 2px 12px rgba(15,23,42,0.06)",
+  };
+  const kicker = {
+    fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+    letterSpacing: "0.1em", color: "#94a3b8", marginBottom: 8, display: "block",
+  };
+  const profileRows = [
+    { key: "full_name",              label: "Full Name", color: "#6366f1" },
+    { key: "contact_number",         label: "WhatsApp",  color: "#10b981" },
+    { key: "current_living_country", label: "Country",   color: "#f59e0b" },
+  ];
+  const fieldRow = {
+    display: "flex", alignItems: "center", gap: 8,
+    padding: "6px 0", borderBottom: "1px solid rgba(15,23,42,0.05)",
+  };
+
+  const sliders = [
+    { label: "Voice Speed",     value: `${voiceSpeed.toFixed(1)}×`,          min: 0.5, max: 2.0,  step: 0.1,  val: voiceSpeed,      set: (v) => setVoiceSpeed(parseFloat(v)),          color: "#6366f1" },
+    { label: "Output Volume",   value: `${Math.round(outputVolume * 100)}%`, min: 0,   max: 1,    step: 0.05, val: outputVolume,    set: (v) => setOutputVolume(parseFloat(v)),         color: "#10b981" },
+    { label: "Music Level",     value: `${Math.round(musicLevel * 100)}%`,   min: 0,   max: 1,    step: 0.05, val: musicLevel,      set: (v) => setMusicLevel(parseFloat(v)),           color: "#f59e0b" },
+    { label: "Mic Sensitivity", value: micSensitivity === 1 ? "Max" : micSensitivity === 50 ? "Min" : String(micSensitivity), min: 1, max: 50, step: 1, val: micSensitivity, set: (v) => setMicSensitivity(parseInt(v, 10)), color: "#8b5cf6" },
+  ];
+
+  const startDisabled = !callSupported || phase !== "idle";
+  const endDisabled   = !callId || phase === "ending" || phase === "completed";
+  const sendDisabled  = !callId || !testMessage.trim() || phase === "processing" || phase === "ending";
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="panel reception-panel">
-      <div className="reception-backdrop" />
+    <div style={{ fontFamily: "'Space Grotesk','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", paddingBottom: 32 }}>
 
-      {/* Header */}
-      <div className="panel-header reception-header">
-        <div>
-          <p className="eyebrow">OpenAI Voice</p>
-          <h2>Aahaas Assistent Final (V0.1)</h2>
-          <p className="panel-copy reception-copy">
-            OpenAI TTS voice — no ElevenLabs latency. Asks "How can I help?", fetches the best package, presents a full summary with defaults (2 PAX · 3-star · 3 nights · next week), confirms changes, then collects name + contact + email to close the booking.
-          </p>
-        </div>
-        <span className="call-badge reception-badge">V0.1 — OpenAI Voice</span>
-      </div>
-
-      {/* Controls Panel */}
-      <div style={{
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 12,
-        padding: "16px 20px",
-        marginBottom: 20,
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-        gap: "14px 20px",
+      {/* ── HEADER ── */}
+      <header style={{
+        background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+        padding: "14px 22px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.22)",
       }}>
-        {/* Voice Agent */}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Voice Agent
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10,
+            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+          }}>🎙</div>
+          <div>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>Aahaas Assistant V0.1</div>
+            <div style={{ color: "#94a3b8", fontSize: 11 }}>Live Call Management Dashboard</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {callId && (
+            <span style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc", padding: "4px 10px", borderRadius: 8, fontSize: 11, fontFamily: "monospace", border: "1px solid rgba(99,102,241,0.25)" }}>
+              {callId}
+            </span>
+          )}
+          {callDuration > 0 && (
+            <span style={{ background: "rgba(16,185,129,0.15)", color: "#6ee7b7", padding: "4px 10px", borderRadius: 8, fontSize: 11, fontFamily: "monospace", border: "1px solid rgba(16,185,129,0.25)" }}>
+              {msToDisplay(callDuration)}
+            </span>
+          )}
+          <span style={{ background: `${phaseColor}1a`, color: phaseColor, border: `1px solid ${phaseColor}40`, padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, minWidth: 80, textAlign: "center" }}>
+            {terminalState.label}
           </span>
-          <select
-            value={selectedVoice}
-            onChange={(e) => setSelectedVoice(e.target.value)}
-            disabled={phase !== "idle"}
-            style={{
-              background: "#1f2937",
-              color: "#f3f4f6",
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 7,
-              padding: "6px 10px",
-              fontSize: 13,
-              cursor: phase !== "idle" ? "not-allowed" : "pointer",
-            }}
-          >
-            {OPENAI_VOICES.map((v) => (
-              <option key={v.value} value={v.value}>{v.label}</option>
+        </div>
+      </header>
+
+      {/* ── 3-COLUMN GRID ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "240px 1fr 280px", gap: 14, padding: "14px 14px 0", alignItems: "start" }}>
+
+        {/* ── LEFT: CONTROLS ── */}
+        <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Voice & Sliders */}
+          <div style={card}>
+            <span style={kicker}>Voice Settings</span>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 500, marginBottom: 5 }}>Voice Agent</div>
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                disabled={controlDisabled}
+                style={{
+                  width: "100%", padding: "7px 10px", borderRadius: 8,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: controlDisabled ? "#f1f5f9" : "#fff",
+                  fontSize: 12, color: "#1e293b", outline: "none",
+                  cursor: controlDisabled ? "not-allowed" : "pointer",
+                }}
+              >
+                {OPENAI_VOICES.map((v) => (
+                  <option key={v.value} value={v.value}>{v.label}</option>
+                ))}
+              </select>
+            </div>
+            {sliders.map((s) => (
+              <div key={s.label} style={{ marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{s.label}</span>
+                  <span style={{ fontSize: 11, color: s.color, fontWeight: 700 }}>{s.value}</span>
+                </div>
+                <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
+                  onChange={(e) => s.set(e.target.value)}
+                  style={{ width: "100%", accentColor: s.color, cursor: "pointer" }}
+                />
+              </div>
             ))}
-          </select>
-        </label>
-
-        {/* Voice Speed */}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Voice Speed — {voiceSpeed.toFixed(1)}×
-          </span>
-          <input
-            type="range" min="0.5" max="2.0" step="0.1"
-            value={voiceSpeed}
-            onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
-            style={{ accentColor: "#8b5cf6", width: "100%" }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#6b7280" }}>
-            <span>0.5×</span><span>1.0×</span><span>2.0×</span>
           </div>
-        </label>
 
-        {/* Output Volume */}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Output Volume — {Math.round(outputVolume * 100)}%
-          </span>
-          <input
-            type="range" min="0" max="1" step="0.05"
-            value={outputVolume}
-            onChange={(e) => setOutputVolume(parseFloat(e.target.value))}
-            style={{ accentColor: "#3b82f6", width: "100%" }}
-          />
-        </label>
-
-        {/* Mic Sensitivity */}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Mic Sensitivity — {micSensitivity === 1 ? "Max" : micSensitivity === 50 ? "Min" : micSensitivity}
-          </span>
-          <input
-            type="range" min="1" max="50" step="1"
-            value={micSensitivity}
-            onChange={(e) => setMicSensitivity(parseInt(e.target.value))}
-            style={{ accentColor: "#10b981", width: "100%" }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#6b7280" }}>
-            <span>High</span><span>Mid</span><span>Low</span>
+          {/* Toggles */}
+          <div style={card}>
+            <span style={kicker}>Controls</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { label: "Ambient Music", on: bgMusicEnabled, onColor: "#f59e0b", offColor: "#cbd5e1", onClick: () => setBgMusicEnabled((p) => !p) },
+                { label: micMuted ? "Mic Muted" : "Mic Active", on: !micMuted, onColor: "#10b981", offColor: "#ef4444", onClick: handleToggleMicMute },
+              ].map((t) => (
+                <div key={t.label} onClick={t.onClick} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "8px 12px", borderRadius: 10, cursor: "pointer",
+                  background: t.on ? `${t.onColor}12` : `${t.offColor}10`,
+                  border: `1px solid ${t.on ? t.onColor : t.offColor}30`,
+                  transition: "all 0.18s",
+                }}>
+                  <span style={{ fontSize: 12, color: t.on ? t.onColor : t.offColor, fontWeight: 600 }}>{t.label}</span>
+                  <div style={{ width: 36, height: 20, borderRadius: 10, background: t.on ? t.onColor : t.offColor, position: "relative", transition: "background 0.18s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: t.on ? 18 : 2, transition: "left 0.18s", boxShadow: "0 1px 4px rgba(0,0,0,0.18)" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </label>
 
-        {/* Music Level */}
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Music Level — {Math.round(musicLevel * 100)}%
-          </span>
-          <input
-            type="range" min="0" max="1" step="0.05"
-            value={musicLevel}
-            onChange={(e) => setMusicLevel(parseFloat(e.target.value))}
-            style={{ accentColor: "#f59e0b", width: "100%" }}
-          />
-        </label>
-
-        {/* Background Music Toggle + Mic Toggle */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => setBgMusicEnabled((p) => !p)}
-            style={{
-              background: bgMusicEnabled ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.06)",
-              border: `1px solid ${bgMusicEnabled ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.1)"}`,
-              color: bgMusicEnabled ? "#f59e0b" : "#9ca3af",
-              borderRadius: 8,
-              padding: "8px 14px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span style={{ fontSize: 16 }}>{bgMusicEnabled ? "♪" : "♪"}</span>
-            Background Music: {bgMusicEnabled ? "ON" : "OFF"}
-          </button>
-          <button
-            type="button"
-            onClick={handleToggleMicMute}
-            style={{
-              background: micMuted ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)",
-              border: `1px solid ${micMuted ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.5)"}`,
-              color: micMuted ? "#ef4444" : "#10b981",
-              borderRadius: 8,
-              padding: "8px 14px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span style={{ fontSize: 16 }}>{micMuted ? "🔇" : "🎤"}</span>
-            Mic: {micMuted ? "MUTED" : "ACTIVE"}
-          </button>
-        </div>
-      </div>
-
-      {/* Call Stage */}
-      <div className="reception-stage">
-        <div className={`call-orb phase-${phase}`}>
-          <div className="call-orb-core" style={{ transform: `scale(${1 + pulseLevel * 0.3})` }} />
-          <div className="call-orb-ring ring-one" />
-          <div className="call-orb-ring ring-two" />
-          <div className="call-orb-ring ring-three" />
-        </div>
-        <div className="reception-status">
-          <span>Call status</span>
-          <strong>{callStatus}</strong>
-          <p>{callId ? `Call ID: ${callId}` : "A new call ID will be generated automatically."}</p>
-          {listeningHint ? <p>{listeningHint}</p> : null}
-        </div>
-      </div>
-
-      {/* Call Controls */}
-      <div className="reception-controls">
-        <button
-          type="button"
-          className="primary-button reception-call-button"
-          onClick={handleStartCall}
-          disabled={!callSupported || phase !== "idle"}
-        >
-          Start call
-        </button>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={handleHangUp}
-          disabled={!callId || phase === "ending" || phase === "completed"}
-        >
-          End call
-        </button>
-        <button type="button" className="secondary-button" onClick={resetState}>
-          Reset
-        </button>
-      </div>
-
-      {!callSupported ? (
-        <p className="error-text">This browser does not support microphone recording.</p>
-      ) : null}
-      {error ? <p className="error-text">{error}</p> : null}
-
-      {/* Terminal Status Panel */}
-      <div style={{
-        background: "#0d1117",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 12,
-        padding: "14px 16px",
-        marginBottom: 20,
-        fontFamily: "'Courier New', Courier, monospace",
-      }}>
-        {/* Status bar */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap",
-          marginBottom: 10,
-          paddingBottom: 10,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <div style={{
-              width: 10, height: 10, borderRadius: "50%",
-              background: terminalState.color,
-              boxShadow: `0 0 6px ${terminalState.color}`,
-              flexShrink: 0,
-            }} />
-            <span style={{ color: terminalState.color, fontWeight: 700, fontSize: 13 }}>
-              {terminalState.label}
-            </span>
+          {/* API Status */}
+          <div style={{ ...card, padding: "12px 14px" }}>
+            <span style={kicker}>API Status</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11, color: "#64748b" }}>State</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: currentApiCall ? "#f59e0b" : "#10b981" }}>{currentApiCall ? "Running" : "Idle"}</span>
+              </div>
+              {currentApiCall && (
+                <div style={{ fontSize: 10, color: "#f59e0b", fontFamily: "monospace", background: "rgba(245,158,11,0.08)", padding: "3px 7px", borderRadius: 5 }}>{currentApiCall}</div>
+              )}
+              {apiResponseTime !== null && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>Last response</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#6366f1" }}>{msToDisplay(apiResponseTime)}</span>
+                </div>
+              )}
+            </div>
           </div>
-          {callId ? (
-            <span style={{ color: "#6b7280", fontSize: 11 }}>ID: {callId}</span>
-          ) : null}
-          {callDuration > 0 ? (
-            <span style={{ color: "#9ca3af", fontSize: 11 }}>
-              Call: {msToDisplay(callDuration)}
-            </span>
-          ) : null}
-          {currentApiCall ? (
-            <span style={{ color: "#f59e0b", fontSize: 11 }}>
-              ⏳ {currentApiCall}
-            </span>
-          ) : null}
-          {apiResponseTime !== null ? (
-            <span style={{ color: "#10b981", fontSize: 11 }}>
-              Last response: {msToDisplay(apiResponseTime)}
-            </span>
-          ) : null}
-          <span style={{ marginLeft: "auto", color: "#374151", fontSize: 11 }}>
-            Voice: {selectedVoice} · {voiceSpeed.toFixed(1)}× · Vol {Math.round(outputVolume * 100)}%
-          </span>
-        </div>
+        </aside>
 
-        {/* Log entries */}
-        <div style={{
-          maxHeight: 140,
-          overflowY: "auto",
-          fontSize: 11,
-          lineHeight: 1.55,
-          color: "#6b7280",
-          scrollbarWidth: "thin",
-        }}>
-          {terminalLog.length === 0 ? (
-            <span style={{ color: "#374151", fontStyle: "italic" }}>System ready. Start a call to see live status.</span>
-          ) : (
-            terminalLog.map((entry, i) => {
-              const color =
-                entry.type === "api-ok"  ? "#10b981" :
-                entry.type === "api-err" ? "#ef4444" :
-                entry.type === "error"   ? "#f87171" :
-                entry.type === "api-start" ? "#f59e0b" :
-                entry.type === "state"   ? "#60a5fa" :
-                entry.type === "info"    ? "#a78bfa" :
-                "#6b7280";
+        {/* ── CENTER: CALL ── */}
+        <main style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Orb + Status + Buttons */}
+          <div style={{ ...card, textAlign: "center", padding: "26px 22px" }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+              <div className={`call-orb phase-${phase}`}>
+                <div className="call-orb-core" style={{ transform: `scale(${1 + pulseLevel * 0.3})` }} />
+                <div className="call-orb-ring ring-one" />
+                <div className="call-orb-ring ring-two" />
+                <div className="call-orb-ring ring-three" />
+              </div>
+            </div>
+            <div style={{ fontWeight: 600, color: "#1e293b", fontSize: 14, marginBottom: 6 }}>{callStatus}</div>
+            {listeningHint && (
+              <div style={{ fontSize: 12, color: "#6366f1", background: "rgba(99,102,241,0.07)", padding: "4px 14px", borderRadius: 20, display: "inline-block", marginBottom: 10 }}>
+                {listeningHint}
+              </div>
+            )}
+            {error && (
+              <div style={{ color: "#ef4444", fontSize: 12, marginTop: 6, background: "rgba(239,68,68,0.06)", padding: "6px 12px", borderRadius: 8 }}>{error}</div>
+            )}
+            {!callSupported && (
+              <div style={{ color: "#ef4444", fontSize: 12, marginTop: 6 }}>Browser does not support microphone recording.</div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18 }}>
+              <button type="button" onClick={handleStartCall} disabled={startDisabled} style={{
+                padding: "10px 24px", borderRadius: 10, border: "none",
+                cursor: startDisabled ? "not-allowed" : "pointer",
+                background: startDisabled ? "#e2e8f0" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                color: startDisabled ? "#94a3b8" : "#fff",
+                fontWeight: 700, fontSize: 13,
+                boxShadow: startDisabled ? "none" : "0 4px 14px rgba(99,102,241,0.32)",
+              }}>▶ Start Call</button>
+              <button type="button" onClick={handleHangUp} disabled={endDisabled} style={{
+                padding: "10px 22px", borderRadius: 10, border: "none",
+                cursor: endDisabled ? "not-allowed" : "pointer",
+                background: endDisabled ? "#e2e8f0" : "linear-gradient(135deg,#ef4444,#dc2626)",
+                color: endDisabled ? "#94a3b8" : "#fff",
+                fontWeight: 700, fontSize: 13,
+                boxShadow: endDisabled ? "none" : "0 4px 14px rgba(239,68,68,0.32)",
+              }}>■ End Call</button>
+              <button type="button" onClick={resetState} style={{
+                padding: "10px 20px", borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.12)", cursor: "pointer",
+                background: "#f8fafc", color: "#475569", fontWeight: 600, fontSize: 13,
+              }}>↺ Reset</button>
+            </div>
+          </div>
+
+          {/* Transcript + Reply */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={card}>
+              <span style={kicker}>Latest Transcript</span>
+              <p style={{ fontSize: 12, color: lastTranscript ? "#1e293b" : "#94a3b8", margin: 0, lineHeight: 1.65 }}>
+                {lastTranscript || "Customer speech will appear here..."}
+              </p>
+            </div>
+            <div style={card}>
+              <span style={kicker}>Assistant Reply</span>
+              <p style={{ fontSize: 12, color: lastReply ? "#1e293b" : "#94a3b8", margin: 0, lineHeight: 1.65 }}>
+                {lastReply || "AI response will appear here..."}
+              </p>
+            </div>
+          </div>
+
+          {/* Live Summary */}
+          {liveSummary && (
+            <div style={{ ...card, background: "rgba(99,102,241,0.04)", border: "1px solid rgba(99,102,241,0.14)" }}>
+              <span style={{ ...kicker, color: "#6366f1" }}>Live Summary</span>
+              <p style={{ fontSize: 12, color: "#374151", margin: 0, lineHeight: 1.65 }}>{liveSummary}</p>
+            </div>
+          )}
+
+          {/* Test Input */}
+          <div style={card}>
+            <span style={kicker}>Quick Test Input</span>
+            <p style={{ fontSize: 11, color: "#64748b", margin: "0 0 10px" }}>Simulate caller answers without mic for testing.</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSendTestMessage(); }}
+                placeholder="Type a caller answer..."
+                style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 12, outline: "none", background: "#fff" }}
+              />
+              <button type="button" onClick={handleSendTestMessage} disabled={sendDisabled} style={{
+                padding: "8px 16px", borderRadius: 8, border: "none",
+                cursor: sendDisabled ? "not-allowed" : "pointer",
+                background: sendDisabled ? "#e2e8f0" : "#6366f1",
+                color: sendDisabled ? "#94a3b8" : "#fff",
+                fontWeight: 600, fontSize: 12,
+              }}>Send</button>
+            </div>
+          </div>
+        </main>
+
+        {/* ── RIGHT: LIVE INTEL ── */}
+        <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* Customer Profile */}
+          <div style={card}>
+            <span style={kicker}>Customer Profile</span>
+            {profileRows.map((row) => {
+              const val = customerProfile[row.key];
+              const filled = !!val;
               return (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                  <span style={{ color: "#374151", flexShrink: 0 }}>{entry.ts}</span>
-                  <span style={{ color }}>{entry.message}</span>
-                  {entry.detail ? <span style={{ color: "#4b5563", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.detail}</span> : null}
+                <div key={row.key} style={fieldRow}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: filled ? row.color : "#cbd5e1", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "#64748b", minWidth: 62 }}>{row.label}</span>
+                  <span style={{ fontSize: 12, color: filled ? "#1e293b" : "#94a3b8", fontWeight: filled ? 600 : 400, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {filled ? formatProfileValue(val) : "Pending"}
+                  </span>
                 </div>
               );
-            })
-          )}
-          <div ref={terminalEndRef} />
-        </div>
-      </div>
-
-      {/* Info Grid */}
-      <div className="reception-grid">
-        <div className="reception-card">
-          <span>Latest transcript</span>
-          <p>{lastTranscript || "Customer speech transcript will appear here during the call."}</p>
-        </div>
-        <div className="reception-card">
-          <span>Assistant reply</span>
-          <p>{lastReply || "AI greeting and next smart question will appear here."}</p>
-        </div>
-        <div className="reception-card">
-          <span>Live summary</span>
-          <p>{liveSummary || "The intake summary will build while the assistant understands the request."}</p>
-        </div>
-      </div>
-
-      {/* Quick Test Chat */}
-      <div className="trip-summary-card reception-test-card">
-        <span>Quick test chat</span>
-        <p>Simulate caller answers without the microphone — useful for testing.</p>
-        <div className="reception-test-row">
-          <input
-            className="records-search reception-test-input"
-            value={testMessage}
-            onChange={(e) => setTestMessage(e.target.value)}
-            placeholder="Type a caller answer for testing..."
-          />
-          <button
-            type="button"
-            className="primary-button"
-            onClick={handleSendTestMessage}
-            disabled={!callId || !testMessage.trim() || phase === "processing" || phase === "ending"}
-          >
-            Send test reply
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="reception-columns">
-        <div className="conversation-log reception-log" aria-live="polite">
-          {conversation.length === 0 ? (
-            <p className="empty-state">
-              Start the call — the assistant will ask how it can help, silently apply defaults (2 PAX · 3-star · 3 nights · next week · SriLanka ), fetch the best package, then present a full summary. After the customer confirms, it collects name → contact → email,Phone,Country,Name  and sends the quotation via WhatsApp and email Reconfirm the WA Number Before end call or Send Qutations.
-            </p>
-          ) : (
-            conversation.map((msg, idx) => (
-              <article
-                key={`${msg.role}-v01-${idx}`}
-                className={`message-bubble message-${msg.role}`}
-              >
-                <span>{msg.role === "assistant" ? "AI assistant" : "Caller"}</span>
-                <p>{msg.content}</p>
-              </article>
-            ))
-          )}
-        </div>
-
-        <div className="reception-side">
-          <div className="trip-summary-card">
-            <span>Customer information</span>
-            {profileFields.map(([label, value]) => (
-              <p key={label}><strong>{label}:</strong> {formatProfileValue(value)}</p>
-            ))}
+            })}
           </div>
-          {quotationStatus ? (
-            <div className="trip-summary-card" style={{
-              borderLeft: `3px solid ${quotationStatus.queued ? "#10b981" : "#ef4444"}`,
+
+          {/* Package Status */}
+          <div style={card}>
+            <span style={kicker}>Package Status</span>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: packageStatusLabel === "Package ready" ? "#10b981" : packageStatusLabel === "Package problem" ? "#ef4444" : "#f59e0b" }}>
+              {packageStatusLabel}
+            </div>
+            {customerProfile.travel_package_prompt && (
+              <p style={{ fontSize: 11, color: "#64748b", margin: "4px 0 0", lineHeight: 1.5 }}>
+                <strong>Prompt:</strong> {customerProfile.travel_package_prompt}
+              </p>
+            )}
+            {packageIssue && (
+              <p style={{ fontSize: 11, color: "#ef4444", margin: "4px 0 0" }}><strong>Issue:</strong> {packageIssue}</p>
+            )}
+          </div>
+
+          {/* Quotation Status */}
+          {quotationStatus !== null && (
+            <div style={{
+              ...card,
+              background: quotationStatus.queued ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+              border: `1px solid ${quotationStatus.queued ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
             }}>
-              <span style={{ color: quotationStatus.queued ? "#10b981" : "#ef4444" }}>
-                {quotationStatus.queued ? "WhatsApp Quotation Queued ✓" : "Quotation Not Sent ✗"}
+              <span style={{ ...kicker, color: quotationStatus.queued ? "#10b981" : "#ef4444" }}>
+                {quotationStatus.queued ? "✓ Quotation Queued" : "✕ Quotation Failed"}
               </span>
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>
-                {quotationStatus.queued
-                  ? "The quotation will be sent via WhatsApp within a few minutes."
-                  : "Contact details may be incomplete (name and WhatsApp number required)."}
+              <p style={{ fontSize: 12, color: "#475569", margin: 0 }}>
+                {quotationStatus.queued ? "WhatsApp quotation queued for background delivery." : "Contact details may be incomplete."}
               </p>
-              {quotationStatus.error ? (
-                <p style={{ color: "#f87171", fontSize: 12 }}>{quotationStatus.error}</p>
-              ) : null}
+              {quotationStatus.error && <p style={{ fontSize: 11, color: "#ef4444", margin: "5px 0 0" }}>{quotationStatus.error}</p>}
             </div>
-          ) : null}
-          <div className="trip-summary-card">
-            <span>Detected service categories</span>
-            <p>{serviceCategories.length > 0 ? serviceCategories.join(", ") : "No category confirmed yet."}</p>
+          )}
+
+          {/* Service Categories */}
+          <div style={card}>
+            <span style={kicker}>Service Categories</span>
+            {serviceCategories.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {serviceCategories.map((cat) => (
+                  <span key={cat} style={{ background: "rgba(99,102,241,0.08)", color: "#6366f1", border: "1px solid rgba(99,102,241,0.2)", padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 500 }}>
+                    {cat}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>No categories yet</span>
+            )}
           </div>
-          <div className="trip-summary-card">
-            <span>Aahaas package status</span>
-            <p>{packageStatusLabel}</p>
-            {customerProfile.travel_package_prompt ? (
-              <p><strong>Prompt:</strong> {customerProfile.travel_package_prompt}</p>
-            ) : null}
-            {packageIssue ? <p><strong>Issue:</strong> {packageIssue}</p> : null}
+
+          {/* Final Report */}
+          {finalReport && (
+            <div style={{ ...card, background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.15)" }}>
+              <span style={{ ...kicker, color: "#10b981" }}>Final Report</span>
+              <p style={{ fontSize: 12, color: "#374151", margin: "0 0 8px", lineHeight: 1.6 }}>{finalReport.summary || "No summary."}</p>
+              {finalReport.products_needed?.length > 0 && (
+                <p style={{ fontSize: 11, color: "#64748b", margin: "0 0 4px" }}><strong>Products:</strong> {finalReport.products_needed.join(", ")}</p>
+              )}
+              {finalReport.follow_up_actions?.length > 0 && (
+                <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}><strong>Follow-up:</strong> {finalReport.follow_up_actions.join(", ")}</p>
+              )}
+            </div>
+          )}
+
+          {/* Suggested Package */}
+          {customerProfile.suggested_package && (
+            <div style={card}>
+              <span style={kicker}>Suggested Package</span>
+              <pre style={{ fontSize: 10, color: "#374151", margin: 0, overflow: "auto", maxHeight: 180, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {formatDebugJson(customerProfile.suggested_package)}
+              </pre>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* ── BOTTOM: TERMINAL + CONVERSATION ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, padding: "12px 14px 0" }}>
+
+        {/* Terminal */}
+        <div style={{ background: "#0d1117", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "11px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#374151", display: "block" }}>System Activity</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>Live Terminal</span>
+            </div>
+            <span style={{ fontSize: 11, color: terminalState.color, fontWeight: 700, background: `${terminalState.color}1a`, padding: "3px 10px", borderRadius: 6 }}>
+              ● {terminalState.label}
+            </span>
           </div>
-          {customerProfile.suggested_package ? (
-            <div className="trip-summary-card">
-              <span>Suggested package</span>
-              <pre className="records-pre">{formatDebugJson(customerProfile.suggested_package)}</pre>
-            </div>
-          ) : null}
-          {finalReport ? (
-            <div className="trip-summary-card reception-report-card">
-              <span>Final call report</span>
-              <p>{finalReport.summary || "No summary returned."}</p>
-              <p>
-                <strong>Products needed:</strong>{" "}
-                {finalReport.products_needed?.length ? finalReport.products_needed.join(", ") : "Not specified"}
-              </p>
-              <p>
-                <strong>Follow-up:</strong>{" "}
-                {finalReport.follow_up_actions?.length ? finalReport.follow_up_actions.join(", ") : "None"}
-              </p>
-            </div>
-          ) : null}
+          <div style={{ height: 260, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 3 }}>
+            {terminalLog.length === 0 ? (
+              <span style={{ fontSize: 11, color: "#4b5563", fontFamily: "monospace" }}>System ready. Start a call...</span>
+            ) : (
+              terminalLog.map((entry, i) => {
+                const ec = { "api-start": "#3b82f6", "api-ok": "#10b981", "api-err": "#ef4444", error: "#ef4444", info: "#94a3b8", state: "#8b5cf6", warn: "#f59e0b" };
+                const c = ec[entry.type] || "#94a3b8";
+                return (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 10, color: "#4b5563", fontFamily: "monospace", flexShrink: 0, marginTop: 1 }}>{entry.ts}</span>
+                    <span style={{ fontSize: 11, color: c, fontFamily: "monospace", lineHeight: 1.5 }}>
+                      {entry.message}
+                      {entry.detail && <span style={{ color: "#6b7280", marginLeft: 6 }}>{entry.detail}</span>}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+            <div ref={terminalEndRef} />
+          </div>
+        </div>
+
+        {/* Conversation */}
+        <div style={{ ...card, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "11px 16px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+            <span style={{ ...kicker, marginBottom: 2 }}>Conversation Log</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>Live Intake History</span>
+          </div>
+          <div style={{ height: 260, overflowY: "auto", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 10 }} aria-live="polite">
+            {conversation.length === 0 ? (
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Start the call — conversation will appear here.</p>
+            ) : (
+              conversation.map((msg, idx) => (
+                <div key={`${msg.role}-${idx}`} style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "assistant" ? "flex-start" : "flex-end", gap: 3 }}>
+                  <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", padding: msg.role === "assistant" ? "0 0 0 4px" : "0 4px 0 0" }}>
+                    {msg.role === "assistant" ? "AI Assistant" : "Caller"}
+                  </span>
+                  <div style={{
+                    maxWidth: "85%",
+                    background: msg.role === "assistant" ? "rgba(99,102,241,0.08)" : "rgba(16,185,129,0.08)",
+                    border: `1px solid ${msg.role === "assistant" ? "rgba(99,102,241,0.2)" : "rgba(16,185,129,0.2)"}`,
+                    borderRadius: msg.role === "assistant" ? "4px 12px 12px 12px" : "12px 4px 12px 12px",
+                    padding: "8px 12px", fontSize: 12, color: "#1e293b", lineHeight: 1.6,
+                  }}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      {callEnded ? (
-        <p className="reception-finish-note">
-          The assistant has ended the call and stored the final report for this caller request.
-        </p>
-      ) : null}
+      {callEnded && (
+        <div style={{ margin: "12px 14px 0", background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 12, padding: "11px 16px", fontSize: 13, color: "#065f46", fontWeight: 500 }}>
+          ✓ The assistant has ended the call and stored the final report.
+        </div>
+      )}
     </div>
   );
 }

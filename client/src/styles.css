@@ -587,6 +587,81 @@ button:disabled {
   align-items: flex-start;
 }
 
+.reception-admin-shell {
+  background:
+    radial-gradient(circle at top left, rgba(255, 202, 123, 0.28), transparent 22%),
+    radial-gradient(circle at 85% 14%, rgba(98, 160, 255, 0.2), transparent 24%),
+    linear-gradient(145deg, rgba(248, 251, 255, 0.97), rgba(236, 242, 252, 0.94));
+}
+
+.reception-admin-hero {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.reception-admin-header {
+  margin-bottom: 0;
+}
+
+.reception-hero-badges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.reception-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.reception-signal-card,
+.reception-admin-card {
+  border: 1px solid rgba(54, 73, 95, 0.12);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 20px 40px rgba(33, 53, 82, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.reception-signal-card {
+  padding: 18px;
+  border-radius: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.reception-signal-card strong {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.reception-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.92fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.reception-admin-main,
+.reception-admin-sidebar {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.reception-admin-card {
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.reception-control-card,
+.reception-status-admin,
+.reception-scroll-panel {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 18px 34px rgba(31, 51, 79, 0.08);
+}
+
 .reception-copy {
   max-width: 62ch;
   margin-bottom: 0;
@@ -603,6 +678,15 @@ button:disabled {
   gap: 22px;
   align-items: center;
   margin-bottom: 22px;
+}
+
+.reception-stage-admin {
+  margin-bottom: 0;
+  padding: 22px;
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(232, 240, 252, 0.84));
+  border: 1px solid rgba(54, 73, 95, 0.1);
 }
 
 .call-orb {
@@ -686,11 +770,21 @@ button:disabled {
   color: #526463;
 }
 
+.reception-status-admin {
+  min-height: 100%;
+  display: grid;
+  gap: 12px;
+}
+
 .reception-controls {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 20px;
+}
+
+.reception-admin-controls {
+  margin-bottom: 0;
 }
 
 .reception-switch-row {
@@ -778,15 +872,27 @@ button:disabled {
   margin-bottom: 20px;
 }
 
+.reception-insight-grid {
+  margin-bottom: 0;
+}
+
 .reception-card {
   padding: 18px;
   border-radius: 18px;
   border: 1px solid rgba(22, 33, 31, 0.08);
-  background: rgba(255, 255, 255, 0.68);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 250, 255, 0.74));
+  box-shadow: 0 16px 28px rgba(42, 68, 103, 0.06);
 }
 
 .reception-card p {
   margin-bottom: 0;
+}
+
+.reception-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+  gap: 18px;
 }
 
 .reception-columns {
@@ -796,7 +902,7 @@ button:disabled {
 }
 
 .reception-log {
-  min-height: 360px;
+  min-height: 720px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(244, 248, 255, 0.82));
 }
@@ -809,6 +915,208 @@ button:disabled {
 
 .reception-report-card {
   background: linear-gradient(135deg, rgba(223, 244, 255, 0.88), rgba(255, 244, 224, 0.88));
+}
+
+.reception-side-stack {
+  max-height: 720px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.reception-scroll-panel {
+  max-height: 720px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 84, 121, 0.55) rgba(255, 255, 255, 0.3);
+}
+
+.reception-scroll-panel::-webkit-scrollbar,
+.reception-terminal-log::-webkit-scrollbar {
+  width: 10px;
+}
+
+.reception-scroll-panel::-webkit-scrollbar-track,
+.reception-terminal-log::-webkit-scrollbar-track {
+  background: rgba(216, 225, 238, 0.55);
+  border-radius: 999px;
+}
+
+.reception-scroll-panel::-webkit-scrollbar-thumb,
+.reception-terminal-log::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(79, 109, 153, 0.8), rgba(208, 95, 48, 0.72));
+  border-radius: 999px;
+  border: 2px solid rgba(216, 225, 238, 0.55);
+}
+
+.reception-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.reception-section-head strong,
+.reception-section-head em {
+  display: block;
+}
+
+.reception-section-head em {
+  font-style: normal;
+  color: #5d6e83;
+  font-size: 0.82rem;
+}
+
+.reception-control-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.reception-field {
+  display: grid;
+  gap: 8px;
+}
+
+.reception-field span {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a6a7e;
+}
+
+.reception-field strong {
+  color: #213653;
+  font-size: 0.95rem;
+}
+
+.reception-field select,
+.reception-field input {
+  width: 100%;
+}
+
+.reception-field select {
+  border: 1px solid rgba(46, 67, 97, 0.12);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(244, 248, 253, 0.95);
+  color: #20344f;
+  font: inherit;
+  outline: none;
+}
+
+.reception-field input[type="range"] {
+  accent-color: #315a95;
+}
+
+.reception-toggle-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.reception-toggle-button {
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.reception-toggle-button-active {
+  background: rgba(217, 119, 6, 0.12);
+  border-color: rgba(217, 119, 6, 0.24);
+  color: #a35708;
+}
+
+.reception-toggle-button-safe {
+  background: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.22);
+  color: #047857;
+}
+
+.reception-toggle-button-danger {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.18);
+  color: #b91c1c;
+}
+
+.reception-terminal-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 14px;
+}
+
+.reception-terminal-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(155, 231, 255, 0.08);
+  color: #9be7ff;
+  font-size: 0.78rem;
+}
+
+.reception-terminal-log {
+  max-height: 380px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.reception-terminal-row {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(155, 231, 255, 0.04);
+  border: 1px solid rgba(155, 231, 255, 0.08);
+  display: grid;
+  gap: 4px;
+}
+
+.reception-terminal-row span {
+  color: rgba(215, 247, 255, 0.6);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+}
+
+.reception-terminal-row strong {
+  color: #eefcff;
+  font-size: 0.92rem;
+}
+
+.reception-terminal-row p,
+.reception-terminal-empty {
+  margin: 0;
+  color: rgba(215, 247, 255, 0.78);
+  font-size: 0.84rem;
+}
+
+.reception-terminal-row-api-ok strong {
+  color: #84f4c4;
+}
+
+.reception-terminal-row-api-err strong,
+.reception-terminal-row-error strong {
+  color: #ffb4a8;
+}
+
+.reception-terminal-row-api-start strong {
+  color: #ffd88f;
+}
+
+.reception-terminal-row-state strong {
+  color: #8cc9ff;
+}
+
+.reception-summary-alert {
+  border-left: 4px solid transparent;
+}
+
+.reception-summary-alert-success {
+  border-left-color: #10b981;
+}
+
+.reception-summary-alert-error {
+  border-left-color: #ef4444;
 }
 
 .reception-search-card {
@@ -1050,7 +1358,10 @@ button:disabled {
   .reception-stage,
   .reception-grid,
   .reception-columns,
-  .records-layout {
+  .records-layout,
+  .reception-signal-grid,
+  .reception-dashboard-grid,
+  .reception-workspace-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1068,5 +1379,14 @@ button:disabled {
 @media (max-width: 560px) {
   .mode-toggle-strip {
     grid-template-columns: 1fr;
+  }
+
+  .reception-stage-admin {
+    padding: 18px;
+  }
+
+  .reception-admin-card,
+  .reception-card {
+    padding: 16px;
   }
 }
