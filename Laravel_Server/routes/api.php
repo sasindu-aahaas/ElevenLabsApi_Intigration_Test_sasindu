@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApiProxyController;
+use App\Http\Controllers\TwilioCallController;
 use App\Http\Controllers\AahaasCallEndController;
 use App\Http\Controllers\AahaasCallSessionController;
 use App\Http\Controllers\AahaasCallTurnController;
@@ -55,6 +56,19 @@ use App\Http\Controllers\TripCallEndController;
 use App\Http\Controllers\TripCallSessionController;
 use App\Http\Controllers\TripCallTurnController;
 use Illuminate\Support\Facades\Route;
+
+// ── Twilio Phone API ──────────────────────────────────────────────────────────
+// Twilio calls these webhooks during real phone calls.
+// APP_URL must be publicly reachable (use ngrok in dev).
+Route::post('/twilio/inbound',              [TwilioCallController::class, 'inbound']);
+Route::post('/twilio/turn',                 [TwilioCallController::class, 'turn']);
+Route::get( '/twilio/package-wait/{callId}',[TwilioCallController::class, 'packageWait']);
+Route::get( '/twilio/audio/{callId}/{key}', [TwilioCallController::class, 'serveAudio']);
+Route::get( '/twilio/hold-music',           [TwilioCallController::class, 'holdMusic']);
+Route::post('/twilio/status',               [TwilioCallController::class, 'callStatus']);
+Route::options('/twilio/inbound',           fn () => response('', 204));
+Route::options('/twilio/turn',              fn () => response('', 204));
+Route::options('/twilio/status',            fn () => response('', 204));
 
 Route::post('/proxy', ApiProxyController::class);
 Route::options('/proxy', fn () => response('', 204));

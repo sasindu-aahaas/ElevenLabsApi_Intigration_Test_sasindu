@@ -5,6 +5,7 @@ import AahaasChatGpt3vHome from "./components/AahaasChatGpt3vHome";
 import AiAssistentFinalTest from "./components/AiAssistentFinalTest";
 import AssistenUvindu from "./components/Assisten_Uvindu";
 import ApiTestPage from "./components/ApiTestPage";
+import PhoneApiTestPage from "./components/PhoneApiTestPage";
 import ChatbotPage from "./components/ChatbotPage";
 import FiveVChatGptAssis from "./components/FiveVChatGptAssis";
 import FourVChatGptAssis from "./components/FourVChatGptAssis";
@@ -129,9 +130,10 @@ function pickMimeType() {
 }
 
 function pageFromHash(hash) {
-  if (hash === "#/records") return "records";
-  if (hash === "#/chatbot") return "chatbot";
-  if (hash === "#/apitest") return "apitest";
+  if (hash === "#/records")   return "records";
+  if (hash === "#/chatbot")   return "chatbot";
+  if (hash === "#/apitest")   return "apitest";
+  if (hash === "#/phonetest") return "phonetest";
   return "workspace";
 }
 
@@ -484,7 +486,7 @@ export default function App() {
   }
 
   function navigateTo(nextPage) {
-    const hashMap = { records: "#/records", chatbot: "#/chatbot", apitest: "#/apitest" };
+    const hashMap = { records: "#/records", chatbot: "#/chatbot", apitest: "#/apitest", phonetest: "#/phonetest" };
     const nextHash = hashMap[nextPage] || "#/";
     if (typeof window !== "undefined" && window.location.hash !== nextHash) {
       window.location.hash = nextHash;
@@ -721,10 +723,11 @@ export default function App() {
   }
 
   const NAV_ITEMS = [
-    { id: "workspace", label: "Voice Workspace", icon: "🎙" },
-    { id: "chatbot",   label: "Chatbot",         icon: "🤖" },
-    { id: "records",   label: "Stored Records",  icon: "🗄" },
-    { id: "apitest",   label: "API Test Lab",    icon: "⚡" },
+    { id: "workspace",  label: "Voice Workspace",  icon: "🎙" },
+    { id: "chatbot",    label: "Chatbot",           icon: "🤖" },
+    { id: "records",    label: "Stored Records",    icon: "🗄" },
+    { id: "apitest",    label: "API Test Lab",      icon: "⚡" },
+    { id: "phonetest",  label: "Phone API Test",    icon: "📞" },
   ];
 
   return (
@@ -788,6 +791,8 @@ export default function App() {
           <ChatbotPage />
         ) : page === "apitest" ? (
           <ApiTestPage />
+        ) : page === "phonetest" ? (
+          <PhoneApiTestPage />
         ) : (
           /* ── WORKSPACE ── */
           <div style={{ padding: "16px 16px 32px" }}>
